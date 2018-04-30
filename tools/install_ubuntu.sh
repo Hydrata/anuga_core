@@ -36,6 +36,7 @@ fi
    
     
 sudo apt-get update -q
+ANUGA_PARALLEL="openmpi"
 
 
 ##########################################################
