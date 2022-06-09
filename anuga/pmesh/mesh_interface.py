@@ -11,6 +11,7 @@ from anuga.geometry.polygon import polylist2points_verts
 import anuga.utilities.log as log
 import datetime
 import warnings
+import mesher
 
 # This is due to pmesh being a package and a module and
 # the current dir being unknown
@@ -103,6 +104,7 @@ def create_mesh_from_regions(bounding_polygon,
 
 
     """
+    print(mesher)
 
     if verbose:
         log.resource_usage_timing(log.logging.CRITICAL, "start_")
