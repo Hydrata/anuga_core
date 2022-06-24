@@ -17,8 +17,14 @@ from __future__ import division
 from builtins import zip
 from builtins import str
 from builtins import range
+try:
+    import osgeo.gdal as gdal
+    import osgeo.ogr as ogr
+    import osgeo.osr as osr
+    gdal_available = True
+except ImportError:
+    gdal_available = False
 
-from osgeo import ogr, osr
 from past.utils import old_div
 from builtins import object
 import sys
@@ -1898,46 +1904,44 @@ class Mesh(object):
         export a shapefile representation of the mesh for visualisation purposes.
 
         """
-
+        if not gdal_available:
+            return True
         mesh_dict = self.Mesh2IODict()
-        if len(mesh_dict['vertices']) == 0:
-            data = Geospatial_data(mesh_dict['points'], geo_reference=self.geo_reference)
-        else:
-            data = Geospatial_data(mesh_dict['vertices'], geo_reference=self.geo_reference)
-
         shapefile_driver = ogr.GetDriverByName("ESRI Shapefile")
-        try:
-            os.remove(shapefile_name)  # remove if existing
-        except OSError:
-            pass
+        if shapefile_name[:-4] == '.shp':
+            shapefile_name = shapefile_name.split('.')[-1]
+        shapefile_names = [
+            f"{shapefile_name}.shp",
+            f"{shapefile_name}.shx",
+            f"{shapefile_name}.dbf",
+            f"{shapefile_name}.prj"
+        ]
+        # remove old files if they exist
+        for filename in shapefile_names:
+            try:
+                os.remove(filename)
+            except OSError:
+                pass
 
-        output_shapefile_ds = shapefile_driver.CreateDataSource(shapefile_name)
+        output_shapefile_ds = shapefile_driver.CreateDataSource(f"{shapefile_name}.shp")
         srs_out = osr.SpatialReference()
-        print('pause here')
-        mesh = dict()
-        srs_out.ImportFromProj4(mesh['mesh']['proj4'])
-        layer = output_shapefile_ds.CreateLayer('mesh', srs_out, ogr.wkbPolygon)
-
-        for elem in range(mesh['mesh']['nelem']):
-            v0 = mesh['mesh']['elem'][elem][0]
-            v1 = mesh['mesh']['elem'][elem][1]
-            v2 = mesh['mesh']['elem'][elem][2]
-
+        if hasattr(mesh_dict.get('geo_reference'), 'get_epsg_code') and mesh_dict.get('geo_reference').get_epsg_code:
+            espg_code = mesh_dict.get('geo_reference').get_epsg_code
+            srs_out.ImportFromEPSG(espg_code)
+        else:
+            srs_out.ImportFromEPSG(32756)
+        layer = output_shapefile_ds.CreateLayer('shapefile_name', srs_out, ogr.wkbPolygon)
+        points = mesh_dict.get('points')
+        for triangle in mesh_dict.get('triangles'):
+            v0 = points[triangle[0]]
+            v1 = points[triangle[1]]
+            v2 = points[triangle[2]]
             # we need this to do the area calculation
             ring = ogr.Geometry(ogr.wkbLinearRing)
-            ring.AddPoint(mesh['mesh']['vertex'][v0][0], mesh['mesh']['vertex'][v0][1])
-            ring.AddPoint(mesh['mesh']['vertex'][v1][0], mesh['mesh']['vertex'][v1][1])
-            ring.AddPoint(mesh['mesh']['vertex'][v2][0], mesh['mesh']['vertex'][v2][1])
-            ring.AddPoint(mesh['mesh']['vertex'][v0][0],
-                          mesh['mesh']['vertex'][v0][1])  # add again to complete the ring.
-
-            # need this for the area calculation
-            tpoly = ogr.Geometry(ogr.wkbPolygon)
-            tpoly.AddGeometry(ring)
-
-            feature = ogr.Feature(layer.GetLayerDefn())
-            feature.SetGeometry(tpoly)
-            layer.CreateFeature(feature)
+            ring.AddPoint(v0[0], v0[1])
+            ring.AddPoint(v1[0], v1[1])
+            ring.AddPoint(v2[0], v2[1])
+            ring.AddPoint(v0[0], v0[1])  # close the triangle
         output_shapefile_ds.FlushCache()
         output_shapefile_ds = None  # close file
 

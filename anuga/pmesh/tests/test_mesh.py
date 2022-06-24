@@ -1049,8 +1049,6 @@ class meshTestCase(unittest.TestCase):
                         'exported Ascii csv file is wrong')
 
     def test_export_shapefile(self):
-        print('hi')
-        assert(False)
         a = Vertex(0, 0)
         b = Vertex(0, 3)
         c = Vertex(3, 3)
@@ -1069,10 +1067,23 @@ class meshTestCase(unittest.TestCase):
             holes=[h1]
         )
 
-        temp_shapefile = tempfile.mktemp("temp_shapefile_name.txt")
+        temp_shapefile = "/tmp/temp_shapefile_basename"
         m.generateMesh("Q", maxArea=2.1)
-        m.export_shapefile(temp_shapefile)
-        os.remove(temp_shapefile)
+        try:
+            m.export_shapefile(temp_shapefile)
+        finally:
+            shapefile_names = [
+                f"{temp_shapefile}.shp",
+                f"{temp_shapefile}.shx",
+                f"{temp_shapefile}.dbf",
+                f"{temp_shapefile}.prj"
+            ]
+            for filename in shapefile_names:
+                assert(os.path.isfile(filename))
+                try:
+                    os.remove(filename)
+                except OSError:
+                    pass
      
     def to_be_lone_vert_in_mesh_gen_c_layer(self):
         # currently just a copy of the above test
