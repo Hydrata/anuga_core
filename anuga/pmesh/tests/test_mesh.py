@@ -23,10 +23,14 @@ import numpy as num
 
 class meshTestCase(unittest.TestCase):
     def setUp(self):
-        pass
+        self.shapefile_names = list()
     
     def tearDown(self):
-        pass
+        for filename in self.shapefile_names:
+            try:
+                os.remove(filename)
+            except OSError:
+                pass
 
     def testPointDistance(self):
         a = Point(0.0, 0.0)
@@ -1072,18 +1076,14 @@ class meshTestCase(unittest.TestCase):
         try:
             m.export_shapefile(temp_shapefile)
         finally:
-            shapefile_names = [
+            self.shapefile_names = [
                 f"{temp_shapefile}.shp",
                 f"{temp_shapefile}.shx",
                 f"{temp_shapefile}.dbf",
                 f"{temp_shapefile}.prj"
             ]
-            for filename in shapefile_names:
+            for filename in self.shapefile_names:
                 assert(os.path.isfile(filename))
-                try:
-                    os.remove(filename)
-                except OSError:
-                    pass
      
     def to_be_lone_vert_in_mesh_gen_c_layer(self):
         # currently just a copy of the above test

@@ -16,10 +16,14 @@ from anuga.coordinate_transforms.geo_reference import Geo_reference,DEFAULT_ZONE
 
 class TestCase(unittest.TestCase):
     def setUp(self):
-        pass
+        self.shapefile_names = list()
 
     def tearDown(self):
-        pass
+        for filename in self.shapefile_names:
+            try:
+                os.remove(filename)
+            except OSError:
+                pass
 
     def test_create_mesh_from_regions(self):
         x=-500
@@ -1009,6 +1013,7 @@ END\n')
         inner2_polygon = geo_ref_poly.change_points_geo_ref(inner2_polygon_absolute)
 
         interior_regions = [(inner1_polygon, 5), (inner2_polygon, 10)]
+        temp_shapefile = 'temp_shapefile_name'
 
         m = create_mesh_from_regions(
             polygon,
@@ -1017,11 +1022,17 @@ END\n')
             interior_regions=interior_regions,
             poly_geo_reference=geo_ref_poly,
             mesh_geo_reference=mesh_geo,
-            shapefile='temp_shapefile.shp'
+            shapefile=f"{temp_shapefile}.shp"
         )
 
-        # Test the mesh instance
-        self.assertTrue(len(m.regions) == 3, 'FAILED!')
+        self.shapefile_names = [
+            f"{temp_shapefile}.shp",
+            f"{temp_shapefile}.shx",
+            f"{temp_shapefile}.dbf",
+            f"{temp_shapefile}.prj"
+        ]
+        for filename in self.shapefile_names:
+            assert(os.path.isfile(filename))
 
 ################################################################################
 
