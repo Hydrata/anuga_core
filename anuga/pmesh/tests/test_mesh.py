@@ -1047,6 +1047,32 @@ class meshTestCase(unittest.TestCase):
                         lFile[4] == "1.0,2.0"
                         ,
                         'exported Ascii csv file is wrong')
+
+    def test_export_shapefile(self):
+        print('hi')
+        assert(False)
+        a = Vertex(0, 0)
+        b = Vertex(0, 3)
+        c = Vertex(3, 3)
+        d = Vertex(1, 2)
+        e = Vertex(3, 1)
+        s1 = Segment(a, b, tag=50)
+        s2 = Segment(b, c, tag=40)
+        s3 = Segment(c, a, tag=30)
+        r1 = Region(2, 1, tag=1.3)
+        h1 = Hole(1, 4)
+
+        m = Mesh(
+            userVertices=[a, b, c, d, e],
+            userSegments=[s1, s2, s3],
+            regions=[r1],
+            holes=[h1]
+        )
+
+        temp_shapefile = tempfile.mktemp("temp_shapefile_name.txt")
+        m.generateMesh("Q", maxArea=2.1)
+        m.export_shapefile(temp_shapefile)
+        os.remove(temp_shapefile)
      
     def to_be_lone_vert_in_mesh_gen_c_layer(self):
         # currently just a copy of the above test

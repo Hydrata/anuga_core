@@ -17,6 +17,8 @@ from __future__ import division
 from builtins import zip
 from builtins import str
 from builtins import range
+
+from osgeo import ogr, osr
 from past.utils import old_div
 from builtins import object
 import sys
@@ -1890,6 +1892,54 @@ class Mesh(object):
                                   geo_reference=self.geo_reference)
 
         geo.export_points_file(ofile, absolute=True)
+
+    def export_shapefile(self, shapefile_name):
+        """
+        export a shapefile representation of the mesh for visualisation purposes.
+
+        """
+
+        mesh_dict = self.Mesh2IODict()
+        if len(mesh_dict['vertices']) == 0:
+            data = Geospatial_data(mesh_dict['points'], geo_reference=self.geo_reference)
+        else:
+            data = Geospatial_data(mesh_dict['vertices'], geo_reference=self.geo_reference)
+
+        shapefile_driver = ogr.GetDriverByName("ESRI Shapefile")
+        try:
+            os.remove(shapefile_name)  # remove if existing
+        except OSError:
+            pass
+
+        output_shapefile_ds = shapefile_driver.CreateDataSource(shapefile_name)
+        srs_out = osr.SpatialReference()
+        print('pause here')
+        mesh = dict()
+        srs_out.ImportFromProj4(mesh['mesh']['proj4'])
+        layer = output_shapefile_ds.CreateLayer('mesh', srs_out, ogr.wkbPolygon)
+
+        for elem in range(mesh['mesh']['nelem']):
+            v0 = mesh['mesh']['elem'][elem][0]
+            v1 = mesh['mesh']['elem'][elem][1]
+            v2 = mesh['mesh']['elem'][elem][2]
+
+            # we need this to do the area calculation
+            ring = ogr.Geometry(ogr.wkbLinearRing)
+            ring.AddPoint(mesh['mesh']['vertex'][v0][0], mesh['mesh']['vertex'][v0][1])
+            ring.AddPoint(mesh['mesh']['vertex'][v1][0], mesh['mesh']['vertex'][v1][1])
+            ring.AddPoint(mesh['mesh']['vertex'][v2][0], mesh['mesh']['vertex'][v2][1])
+            ring.AddPoint(mesh['mesh']['vertex'][v0][0],
+                          mesh['mesh']['vertex'][v0][1])  # add again to complete the ring.
+
+            # need this for the area calculation
+            tpoly = ogr.Geometry(ogr.wkbPolygon)
+            tpoly.AddGeometry(ring)
+
+            feature = ogr.Feature(layer.GetLayerDefn())
+            feature.SetGeometry(tpoly)
+            layer.CreateFeature(feature)
+        output_shapefile_ds.FlushCache()
+        output_shapefile_ds = None  # close file
 
     def import_ungenerate_file(self, ofile, tag=None, region_tag=None):
         """
