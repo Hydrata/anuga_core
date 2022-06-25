@@ -17,13 +17,6 @@ from __future__ import division
 from builtins import zip
 from builtins import str
 from builtins import range
-try:
-    import osgeo.gdal as gdal
-    import osgeo.ogr as ogr
-    import osgeo.osr as osr
-    gdal_available = True
-except ImportError:
-    gdal_available = False
 
 from past.utils import old_div
 from builtins import object
@@ -1899,51 +1892,6 @@ class Mesh(object):
 
         geo.export_points_file(ofile, absolute=True)
 
-    def export_shapefile(self, shapefile_name):
-        """
-        export a shapefile representation of the mesh for visualisation purposes.
-
-        """
-        if not gdal_available:
-            return True
-        mesh_dict = self.Mesh2IODict()
-        shapefile_driver = ogr.GetDriverByName("ESRI Shapefile")
-        if shapefile_name[:-4] == '.shp':
-            shapefile_name = shapefile_name.split('.')[-1]
-        shapefile_names = [
-            f"{shapefile_name}.shp",
-            f"{shapefile_name}.shx",
-            f"{shapefile_name}.dbf",
-            f"{shapefile_name}.prj"
-        ]
-        # remove old files if they exist
-        for filename in shapefile_names:
-            try:
-                os.remove(filename)
-            except OSError:
-                pass
-
-        output_shapefile_ds = shapefile_driver.CreateDataSource(f"{shapefile_name}.shp")
-        srs_out = osr.SpatialReference()
-        if hasattr(mesh_dict.get('geo_reference'), 'get_epsg_code') and mesh_dict.get('geo_reference').get_epsg_code:
-            espg_code = mesh_dict.get('geo_reference').get_epsg_code
-            srs_out.ImportFromEPSG(espg_code)
-        else:
-            srs_out.ImportFromEPSG(32756)
-        layer = output_shapefile_ds.CreateLayer('shapefile_name', srs_out, ogr.wkbPolygon)
-        points = mesh_dict.get('points')
-        for triangle in mesh_dict.get('triangles'):
-            v0 = points[triangle[0]]
-            v1 = points[triangle[1]]
-            v2 = points[triangle[2]]
-            # we need this to do the area calculation
-            ring = ogr.Geometry(ogr.wkbLinearRing)
-            ring.AddPoint(v0[0], v0[1])
-            ring.AddPoint(v1[0], v1[1])
-            ring.AddPoint(v2[0], v2[1])
-            ring.AddPoint(v0[0], v0[1])  # close the triangle
-        output_shapefile_ds.FlushCache()
-        output_shapefile_ds = None  # close file
 
     def import_ungenerate_file(self, ofile, tag=None, region_tag=None):
         """

@@ -132,7 +132,6 @@ def create_mesh_from_regions(bounding_polygon,
               'minimum_triangle_angle': minimum_triangle_angle,
               'fail_if_polygons_outside': fail_if_polygons_outside,
               'breaklines': breaklines,
-              'shapefile': shapefile,
               'verbose': verbose,
               'regionPtArea': regionPtArea}   # FIXME (Ole): Should be bypassed one day. See ticket:14
 
@@ -167,7 +166,6 @@ def _create_mesh_from_regions(bounding_polygon,
                               minimum_triangle_angle=28.0,
                               fail_if_polygons_outside=True,
                               breaklines=None,
-                              shapefile=None,
                               verbose=True,
                               regionPtArea=None):
     """_create_mesh_from_regions - internal function.
@@ -369,9 +367,6 @@ def _create_mesh_from_regions(bounding_polygon,
     # stored irrespective of whether the computation
     # was cached or not. This caused Domain to
     # recompute as it has meshfile as a dependency
-
-    if shapefile:
-        m.export_shapefile(shapefile_name=shapefile)
     # Decide whether to store this mesh or return it
 
     if filename is None:
