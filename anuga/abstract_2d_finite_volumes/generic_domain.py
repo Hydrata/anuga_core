@@ -1567,9 +1567,10 @@ class Generic_Domain(object):
         # Save triangulation to location pointed by filename
         plt.savefig(filename)
 
-    def dump_shapefile(self, shapefile_name='/tmp/domain'):
+    def dump_shapefile(self, shapefile_name='/tmp/domain', epsg_code=None):
         """ Get vertex coordinates, partition full and ghost triangles
             based on self.tri_full_flag
+            epsg_code must be int
         """
         try:
             import osgeo.gdal as gdal
@@ -1618,10 +1619,7 @@ class Generic_Domain(object):
         output_shapefile_ds = shapefile_driver.CreateDataSource(f"{shapefile_name}.shp")
         srs_out = osr.SpatialReference()
         mesh_dict = dict()
-        if self.geo_reference and self.geo_reference.get_epsg_code:
-            srs_out.ImportFromEPSG(self.geo_reference.get_epsg_code)
-        else:
-            srs_out.ImportFromEPSG(32756)
+        srs_out.ImportFromEPSG(epsg_code)
         layer = output_shapefile_ds.CreateLayer('shapefile_name', srs_out, ogr.wkbPolygon)
         points = mesh_dict.get('points')
         ring = None
