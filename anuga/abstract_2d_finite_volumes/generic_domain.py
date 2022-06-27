@@ -1579,6 +1579,7 @@ class Generic_Domain(object):
         except ImportError:
             raise UserWarning('gdal not available, can not create shapefile from domain')
         shapefile_driver = ogr.GetDriverByName("ESRI Shapefile")
+        epsg_integer = int(epsg_code.split(':')[1] if ':' in epsg_code else epsg_code)
         if shapefile_name[:-4] == '.shp':
             shapefile_name = shapefile_name.split('.')[-1]
         shapefile_names = [
@@ -1619,7 +1620,7 @@ class Generic_Domain(object):
         output_shapefile_ds = shapefile_driver.CreateDataSource(f"{shapefile_name}.shp")
         srs_out = osr.SpatialReference()
         mesh_dict = dict()
-        srs_out.ImportFromEPSG(epsg_code)
+        srs_out.ImportFromEPSG(epsg_integer)
         layer = output_shapefile_ds.CreateLayer('shapefile_name', srs_out, ogr.wkbPolygon)
         points = mesh_dict.get('points')
         ring = None
