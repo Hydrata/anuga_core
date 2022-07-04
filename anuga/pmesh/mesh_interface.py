@@ -47,6 +47,7 @@ def create_mesh_from_regions(bounding_polygon,
                              regionPtArea=None,
                              minimum_triangle_angle=28.0,
                              fail_if_polygons_outside=True,
+                             shapefile=None,
                              use_cache=False,
                              verbose=True):
     """Create mesh from bounding polygons, and resolutions.
@@ -91,6 +92,9 @@ def create_mesh_from_regions(bounding_polygon,
                The polygons are not closed.
 
     regionPtArea is a list of user-specified point-based regions with max area
+
+    shapefile is a string filename. If provided a shapefile representation of
+    the mesh will be saved here for visualisation purposes.
 
     Returns the mesh instance if no filename is given
 
@@ -363,7 +367,6 @@ def _create_mesh_from_regions(bounding_polygon,
     # stored irrespective of whether the computation
     # was cached or not. This caused Domain to
     # recompute as it has meshfile as a dependency
-
     # Decide whether to store this mesh or return it
 
     if filename is None:

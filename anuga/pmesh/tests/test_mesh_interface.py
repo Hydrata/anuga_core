@@ -16,10 +16,14 @@ from anuga.coordinate_transforms.geo_reference import Geo_reference,DEFAULT_ZONE
 
 class TestCase(unittest.TestCase):
     def setUp(self):
-        pass
+        self.shapefile_names = list()
 
     def tearDown(self):
-        pass
+        for filename in self.shapefile_names:
+            try:
+                os.remove(filename)
+            except OSError:
+                pass
 
     def test_create_mesh_from_regions(self):
         x=-500
@@ -980,6 +984,55 @@ END\n')
         else:
             msg = 'Segment out of bounds not caught '
             raise_(Exception, msg)
+
+    def test_create_mesh_from_regions_shapefile(self):
+        mesh_filename = tempfile.mktemp('temp.tsh')
+        x = -500
+        y = -1000
+        mesh_geo = Geo_reference(56, x, y)
+
+        # These are the absolute values
+        polygon_absolute = [
+            [0, 0],
+            [100, 0],
+            [100, 100],
+            [0, 100]
+        ]
+
+        x_p = -10
+        y_p = -40
+        geo_ref_poly = Geo_reference(56, x_p, y_p)
+        polygon = geo_ref_poly.change_points_geo_ref(polygon_absolute)
+
+        boundary_tags = {'walls': [0, 1], 'bom': [2, 3]}
+
+        inner1_polygon_absolute = [[10, 10], [20, 10], [20, 20], [10, 20]]
+        inner1_polygon = geo_ref_poly.change_points_geo_ref(inner1_polygon_absolute)
+
+        inner2_polygon_absolute = [[30, 30], [40, 30], [40, 40], [30, 40]]
+        inner2_polygon = geo_ref_poly.change_points_geo_ref(inner2_polygon_absolute)
+
+        interior_regions = [(inner1_polygon, 5), (inner2_polygon, 10)]
+        temp_shapefile = 'temp_shapefile_name'
+
+        m = create_mesh_from_regions(
+            polygon,
+            boundary_tags,
+            10000000,
+            interior_regions=interior_regions,
+            poly_geo_reference=geo_ref_poly,
+            mesh_geo_reference=mesh_geo,
+            shapefile=f"{temp_shapefile}.shp"
+        )
+
+        self.shapefile_names = [
+            f"{temp_shapefile}.shp",
+            f"{temp_shapefile}.shx",
+            f"{temp_shapefile}.dbf",
+            f"{temp_shapefile}.prj"
+        ]
+        for filename in self.shapefile_names:
+            assert(os.path.isfile(filename))
 
 ################################################################################
 

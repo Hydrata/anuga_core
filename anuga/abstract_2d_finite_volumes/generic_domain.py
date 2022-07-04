@@ -15,6 +15,7 @@
 from builtins import range
 from builtins import object
 from time import time as walltime
+import os
 
 from anuga.config import max_smallsteps, beta_w, epsilon
 from anuga.config import CFL
@@ -1565,6 +1566,82 @@ class Generic_Domain(object):
 
         # Save triangulation to location pointed by filename
         plt.savefig(filename)
+
+    def dump_shapefile(self, shapefile_name='/tmp/domain', epsg_code=None):
+        """ Get vertex coordinates, partition full and ghost triangles
+            based on self.tri_full_flag
+            epsg_code must be int
+        """
+        try:
+            import osgeo.gdal as gdal
+            import osgeo.ogr as ogr
+            import osgeo.osr as osr
+        except ImportError:
+            raise UserWarning('gdal not available, can not create shapefile from domain')
+        shapefile_driver = ogr.GetDriverByName("ESRI Shapefile")
+        epsg_integer = int(epsg_code.split(':')[1] if ':' in epsg_code else epsg_code)
+        if shapefile_name[:-4] == '.shp':
+            shapefile_name = shapefile_name.split('.')[-1]
+        shapefile_names = [
+            f"{shapefile_name}.shp",
+            f"{shapefile_name}.shx",
+            f"{shapefile_name}.dbf",
+            f"{shapefile_name}.prj"
+        ]
+        # remove old files if they exist
+        for filename in shapefile_names:
+            try:
+                os.remove(filename)
+            except OSError:
+                pass
+
+        vertices = self.get_vertex_coordinates()
+        full_mask = num.repeat(self.tri_full_flag == 1, 3)
+        ghost_mask = num.repeat(self.tri_full_flag == 0, 3)
+
+        # Gather full and ghost nodes
+        fx = vertices[full_mask, 0]
+        fy = vertices[full_mask, 1]
+        gx = vertices[ghost_mask, 0]
+        gy = vertices[ghost_mask, 1]
+
+        # Plot full triangles
+        n = int(len(fx) // 3)  # FIXME (Ole): No need to cast as int()
+
+        triang = num.array(list(range(0, 3 * n)))
+        triang.shape = (n, 3)
+
+        # Plot ghost triangles
+        n = int(len(gx) // 3)  # FIXME (Ole): No need to cast as int()
+        if n > 0:
+            triang = num.array(list(range(0, 3 * n)))
+            triang.shape = (n, 3)
+
+        output_shapefile_ds = shapefile_driver.CreateDataSource(f"{shapefile_name}.shp")
+        srs_out = osr.SpatialReference()
+        mesh_dict = dict()
+        srs_out.ImportFromEPSG(epsg_integer)
+        layer = output_shapefile_ds.CreateLayer('shapefile_name', srs_out, ogr.wkbPolygon)
+        points = mesh_dict.get('points')
+        ring = None
+        triangle_polygons_geom = None
+        for triangle in triang:
+            # we need this to do the area calculation
+            ring = ogr.Geometry(ogr.wkbLinearRing)
+            ring.AddPoint(fx[triangle[0]], fy[triangle[0]])
+            ring.AddPoint(fx[triangle[1]], fy[triangle[1]])
+            ring.AddPoint(fx[triangle[2]], fy[triangle[2]])
+            ring.AddPoint(fx[triangle[0]], fy[triangle[0]])  # close the triangle
+
+            # need this for the area calculation
+            triangle_polygons_geom = ogr.Geometry(ogr.wkbPolygon)
+            triangle_polygons_geom.AddGeometry(ring)
+
+            triangle_polygon_feature = ogr.Feature(layer.GetLayerDefn())
+            triangle_polygon_feature.SetGeometry(triangle_polygons_geom)
+            layer.CreateFeature(triangle_polygon_feature)
+        output_shapefile_ds.FlushCache()
+        output_shapefile_ds = None  # close file
 
     ####################################################################
     # Main components of evolve

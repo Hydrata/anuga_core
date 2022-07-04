@@ -135,6 +135,16 @@ class Geo_reference(object):
 
         return self.zone
 
+    @property
+    def get_epsg_code(self):
+        if self.projection == 'UTM' and self.false_northing >= 0 and self.get_zone() > 0:
+            # Northern Hemisphere
+            return int(f"{326}{self.get_zone()}")
+        if self.projection == 'UTM' and self.false_northing < 0 and self.get_zone() > 0:
+            # Southern Hemisphere
+            return int(f"{327}{self.get_zone()}")
+        return None
+
     def write_NetCDF(self, outfile):
         """Write georef attributes to an open NetCDF file.
 
