@@ -1,8 +1,7 @@
 """ Generic function utilities to test type of function
 """
 
-from builtins import str
-from future.utils import raise_
+
 import numpy as num
 from anuga.fit_interpolate.interpolate import Modeltime_too_early
 from anuga.fit_interpolate.interpolate import Modeltime_too_late
@@ -38,7 +37,7 @@ def determine_function_type(function):
         # test if temporal
         x = num.array([0.0, 1.0])
         y = num.array([0.0, 2.0])
-        t =0.0
+        t = 0.0
 
         #function(x,y,t)
         try:
@@ -54,10 +53,17 @@ def determine_function_type(function):
                 except TypeError:
                     #print 'problem calling with one scalar argument'
                     msg = 'Input argument cannot be called as f(t), f(x,y) or f(x,y,t)'
-                    raise_(Exception, msg)
+                    raise Exception(msg)
                 except ValueError:
                     #print 'problem calling out of range'
                     return 't'
+                except Modeltime_too_early:
+                    #print 'test argument out of range'
+                    return 't'
+                except Modeltime_too_late:
+                    #print 'test argument out of range'
+                    return 't'
+
                 else:
                     return 't'
             except ValueError:

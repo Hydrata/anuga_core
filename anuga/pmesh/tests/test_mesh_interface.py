@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
-from builtins import str
-from future.utils import raise_
+
 import tempfile
 import unittest
 import os
+import pytest
 
 from anuga.pmesh.mesh import importMeshFromFile
 from anuga.pmesh.mesh_interface import create_mesh_from_regions
@@ -25,6 +25,7 @@ class TestCase(unittest.TestCase):
             except OSError:
                 pass
 
+    
     def test_create_mesh_from_regions(self):
         x=-500
         y=-1000
@@ -105,6 +106,7 @@ class TestCase(unittest.TestCase):
                                           closed=False),
                         'FAILED!')
 
+    
     def test_create_mesh_from_regions_with_caching(self):
         x=-500
         y=-1000
@@ -213,6 +215,7 @@ class TestCase(unittest.TestCase):
                                            verbose=False,
                                            use_cache=True)
 
+    
     def test_create_mesh_from_regions2(self):
         # These are the absolute values
         min_x = -10
@@ -221,7 +224,7 @@ class TestCase(unittest.TestCase):
 
         x_p = -10
         y_p = -40
-        zone = 808
+        zone = 23
         geo_ref_poly = Geo_reference(zone, x_p, y_p)
         polygon = geo_ref_poly.change_points_geo_ref(polygon_absolute)
 
@@ -254,7 +257,8 @@ class TestCase(unittest.TestCase):
         self.assertTrue(m.geo_reference.get_zone()==zone, 'FAILED!')
         self.assertTrue(m.geo_reference.get_xllcorner()==min_x, 'FAILED!')
         self.assertTrue(m.geo_reference.get_yllcorner()==min_y, 'FAILED!')		
-		
+
+    	
     def test_create_mesh_from_regions3(self):
         # These are the absolute values
         min_x = -10
@@ -295,6 +299,7 @@ class TestCase(unittest.TestCase):
         self.assertTrue(m.geo_reference.get_xllcorner() == min_x, 'FAILED!')
         self.assertTrue(m.geo_reference.get_yllcorner() == min_y, 'FAILED!')
 
+    
     def test_create_mesh_from_regions4(self):
         file_name = tempfile.mktemp('.tsh')
 
@@ -341,6 +346,7 @@ class TestCase(unittest.TestCase):
 
         os.remove(file_name)
 
+    
     def test_create_mesh_from_regions5(self):
         file_name = tempfile.mktemp('.tsh')
 
@@ -376,6 +382,7 @@ class TestCase(unittest.TestCase):
 
         os.remove(file_name)
 
+    
     def test_create_mesh_from_regions6(self):
         file_name = tempfile.mktemp('.tsh')
 
@@ -418,6 +425,7 @@ class TestCase(unittest.TestCase):
 
         os.remove(file_name)
 
+    
     def test_create_mesh_from_regions7(self):
         file_name = tempfile.mktemp('.tsh')
 
@@ -463,6 +471,7 @@ class TestCase(unittest.TestCase):
 
         os.remove(file_name)
 
+    
     def test_create_mesh_from_regions_interior_regions(self):
         '''Test that create_mesh_from_regions fails when an interior
         region is outside bounding polygon.
@@ -500,8 +509,9 @@ class TestCase(unittest.TestCase):
         else:
             msg = 'Interior polygon sticking outside bounding polygon should '
             msg += 'cause an Exception to be raised'
-            raise_(Exception, msg)
+            raise Exception(msg)
 
+    
     def test_create_mesh_from_regions_interior_regions1(self):
         '''Test that create_mesh_from_regions fails
         when an interior region is outside bounding polygon.
@@ -554,7 +564,7 @@ class TestCase(unittest.TestCase):
         # This one sticks outside bounding polygon - should fail
         interior_regions = [[poly_onslow, 50000], [poly_region, 50000],
                             [poly_coast, 100000], [poly_thevenard, 100000]]
-        boundary_tags = {'walls': [0,1], 'bom': [2]}
+        boundary_tags = {'walls': [0,1], 'bom': [2], 'exterior': [3,4,5,6]}
 
         try:
             m = create_mesh_from_regions(poly_all,
@@ -567,8 +577,9 @@ class TestCase(unittest.TestCase):
         else:
             msg = 'Interior polygon sticking outside bounding polygon should '
             msg += 'cause an Exception to be raised'
-            raise_(Exception, msg)
+            raise Exception(msg)
 
+    
     def FIXMEtest_create_mesh_with_multiply_tagged_segments(self):
         '''Test that create_mesh_from_regions fails when
         segments are listed repeatedly in boundary_tags.
@@ -607,7 +618,7 @@ class TestCase(unittest.TestCase):
         else:
             msg = 'Tags are listed repeatedly, but create mesh from regions '
             msg += 'does not cause an Exception to be raised'
-            raise_(Exception, msg)
+            raise Exception(msg)
 
             
     def test_create_mesh_with_segments_out_of_bounds(self):
@@ -638,8 +649,9 @@ class TestCase(unittest.TestCase):
         else:
             msg = 'Tags are listed repeatedly, but create mesh from regions '
             msg += 'does not cause an Exception to be raised'
-            raise_(Exception, msg)
-            
+            raise Exception(msg)
+
+           
     def test_create_mesh_with_breaklines(self):
         # These are the absolute values
         polygon = [[100,100], [1000,100], [1000,1000], [100,1000]]
@@ -656,7 +668,7 @@ class TestCase(unittest.TestCase):
         self.assertTrue(len(segs) == 5, 'FAILED!')
         self.assertTrue(len(m.userVertices) == 6, 'FAILED!')
 
-
+    
     def test_create_mesh_with_interior_holes(self):
         # These are the absolute values
         polygon = [[100,100], [1000,100], [1000,1000], [100,1000]]
@@ -703,7 +715,7 @@ class TestCase(unittest.TestCase):
             pass
         else:
             msg = 'Passing a single polygon should have raised an error '
-            raise_(Exception, msg)
+            raise Exception(msg)
 
 
 
@@ -718,7 +730,7 @@ class TestCase(unittest.TestCase):
             pass
         else:
             msg = 'Passing a single polygon should have raised an error '
-            raise_(Exception, msg)
+            raise Exception(msg)
         
         
     def test_create_mesh_with_interior_holes_and_tags(self):
@@ -759,7 +771,7 @@ class TestCase(unittest.TestCase):
                             [4.0, 0.0]]
         x_p = -10
         y_p = -40
-        zone = 808
+        zone = 23
         geo_ref_poly = Geo_reference(zone, x_p, y_p)
         polygon = geo_ref_poly.change_points_geo_ref(polygon_absolute)
         boundary_tags = {'50': [0],
@@ -983,7 +995,7 @@ END\n')
             pass
         else:
             msg = 'Segment out of bounds not caught '
-            raise_(Exception, msg)
+            raise Exception(msg)
 
     def test_create_mesh_from_regions_shapefile(self):
         mesh_filename = tempfile.mktemp('temp.tsh')

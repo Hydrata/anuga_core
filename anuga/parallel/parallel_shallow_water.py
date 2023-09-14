@@ -10,12 +10,7 @@ Ole Nielsen, Stephen Roberts, Duncan Gray, Christopher Zoppou
 Geoscience Australia, 2004-2005
 
 """
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
 
-from builtins import range
-from past.utils import old_div
 from anuga import Domain
 
 from . import parallel_generic_communications as generic_comms
@@ -145,7 +140,8 @@ class Parallel_domain(Domain):
         receive the information for the ghost cells
         """
 
-        generic_comms.communicate_ghosts_asynchronous(self, quantities)
+        #generic_comms.communicate_ghosts_asynchronous(self, quantities)
+        generic_comms.communicate_ghosts_non_blocking(self, quantities)
         #generic_comms.communicate_ghosts_blocking(self)
 
     def apply_fractional_steps(self):
@@ -236,7 +232,7 @@ class Parallel_domain(Domain):
 
             # Plot full triangles
             for i in range(0, numprocs):
-                n = int(old_div(len(fx[i]),3))
+                n = int(len(fx[i])//3)
 
                 triang = num.array(list(range(0,3*n)))
                 triang.shape = (n, 3)
@@ -244,7 +240,7 @@ class Parallel_domain(Domain):
 
             # Plot ghost triangles
             for i in range(0, numprocs):
-                n = int(old_div(len(gx[i]),3))
+                n = int(len(gx[i])//3)
                 if n > 0:
                     triang = num.array(list(range(0,3*n)))
                     triang.shape = (n, 3)
@@ -259,3 +255,51 @@ class Parallel_domain(Domain):
             pypar.send(vertices[full_mask,1], 0)
             pypar.send(vertices[ghost_mask,0], 0)
             pypar.send(vertices[ghost_mask,1], 0)
+
+
+    def dump_local_triangulation(self, filename=None):
+        '''
+        Outputs domain triangulation, full triangles are shown in green while 
+        ghost triangles are shown in blue.
+
+        The default filename is self.get_name()+'.png'
+        '''
+
+        if filename is None:
+            filename = self.get_name() + '.png'
+
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            import matplotlib.tri as tri
+        except:
+            print("Couldn't import module from matplotlib, probably you need to update matplotlib")
+            raise
+
+        vertices = self.get_vertex_coordinates()
+        full_mask = num.repeat(self.tri_full_flag == 1, 3)
+        ghost_mask = num.repeat(self.tri_full_flag == 0, 3)
+
+        plt.figure()
+
+        fx = vertices[full_mask,0]
+        fy = vertices[full_mask,1]
+        gx = vertices[ghost_mask,0]
+        gy = vertices[ghost_mask,1]
+
+        # Plot full triangles
+        n = int(len(fx)/3)
+        triang = num.array(list(range(0,3*n)))
+        triang.shape = (n, 3)
+        plt.triplot(fx, fy, triang, 'g-', linewidth = 0.5)
+
+        # Plot ghost triangles
+        n = int(len(gx)/3)
+        if n > 0:
+            triang = num.array(list(range(0,3*n)))
+            triang.shape = (n, 3)
+            plt.triplot(gx, gy, triang, 'b--', linewidth = 0.5)
+
+        # Save triangulation to location pointed by filename
+        plt.savefig(filename, dpi=600)

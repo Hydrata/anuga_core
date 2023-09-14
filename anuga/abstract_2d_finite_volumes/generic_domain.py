@@ -311,6 +311,8 @@ class Generic_Domain(object):
         self.set_beta(beta_w)
         self.set_evolve_max_timestep(max_timestep)
         self.set_evolve_min_timestep(min_timestep)
+        self.set_fixed_flux_timestep(None)
+
         self.boundary_map = None  # Will be populated by set_boundary
 
         # Model time
@@ -586,11 +588,27 @@ class Generic_Domain(object):
     def set_zone(self, zone):
         """Set zone for domain."""
 
-        self.geo_reference.zone = zone
+        self.geo_reference.set_zone(zone)
+
+    def get_zone(self):
+        """get zone for domain Geo_reference"""
+
+        return self.geo_reference.get_zone()
+
 
     def set_institution(self,institution):
 
         self.institution = institution
+
+
+    def set_hemisphere(self, hemisphere):
+
+        self.geo_reference.set_hemisphere(hemisphere)
+
+    def get_hemisphere(self):
+
+        return self.geo_reference.get_hemisphere()
+
 
     def get_datetime(self):
         """Return date time of current modeltime."""
@@ -642,7 +660,10 @@ class Generic_Domain(object):
     def set_evolve_max_timestep(self, max_timestep):
         """Set default max_timestep for evolving."""
 
-        self.evolve_max_timestep = max_timestep
+        try:
+            self.evolve_max_timestep = min(self.evolve_max_timestep, max_timestep)
+        except:
+            self.evolve_max_timestep = max_timestep
 
     def get_evolve_max_timestep(self):
         """Set default max_timestep for evolving."""
@@ -895,8 +916,10 @@ class Generic_Domain(object):
         # FIXME (Ole): Perhaps make method .is_parallel() returing True if numprocs > 1 and False if numprocs == 0
         if not self.parallel:
             allowed_tags = list(set(self.boundary.values())) # List of unique tags 
+            allowed_tags.append('ghost') # Sometimes we create parallel domains sequentially
             for key in boundary_map:
                 if key not in allowed_tags:
+                    allowed_tags.remove('ghost')
                     msg = f'Tag "{key}" provided does not exist in the domain. '
                     msg += 'Allowed tags are: %s' % allowed_tags
                     raise Exception(msg)
@@ -1136,16 +1159,17 @@ class Generic_Domain(object):
         else:
             time_unit = 'sec'
 
+
         if datetime:
-            model_dt = self.get_datetime().strftime("%Y-%m-%d %H:%M:%S%z")
+            model_dt = self.get_datetime().strftime("%Y-%m-%d %H:%M:%S.%f%z")
 
             if self.recorded_min_timestep == self.recorded_max_timestep:
-                msg += 'DateTime: %s, delta t = %.8f (s), steps=%d' \
+                msg += '%s: delta t = %.8f (s), steps=%d' \
                     % (model_dt, self.recorded_min_timestep, self.number_of_steps)
             elif self.recorded_min_timestep > self.recorded_max_timestep:
-                msg += 'DateTime: %s, steps=%d' % (model_dt, self.number_of_steps)
+                msg += '%s: steps=%d' % (model_dt, self.number_of_steps)
             else:
-                msg += 'DateTime: %s, delta t in [%.8f, %.8f] (s), steps=%d' \
+                msg += '%s: delta t in [%.8f, %.8f] (s), steps=%d' \
                     % (model_dt, self.recorded_min_timestep,
                     self.recorded_max_timestep, self.number_of_steps)
         else:
@@ -1479,7 +1503,8 @@ class Generic_Domain(object):
         if name is None:
             frame = inspect.currentframe()
             script_name = inspect.getouterframes(frame)[1][1]
-            name = 'output_' + os.path.splitext(script_name)[0]
+            basename = os.path.basename(script_name)
+            name = 'output_' + os.path.splitext(basename)[0]
 
         # remove any '.sww' end
         if name.endswith('.sww'):
@@ -1758,22 +1783,27 @@ class Generic_Domain(object):
         else:
             if finaltime is not None:
                 self.finaltime = float(finaltime)
+                self.relative_finaltime = self.finaltime - self.starttime
             if duration is not None:
                 self.finaltime = float(duration) + self.get_time()
+                self.relative_finaltime = float(duration) + self.relative_time
 
-        if self.finaltime < self.get_time():
+        if self.relative_finaltime < self.relative_time:
             import warnings
             msg = ('\n finaltime %g is less than current time'
                    ' %g! ' % (self.finaltime, self.get_time()))
             msg += 'finaltime set to current time'
             self.finaltime = self.get_time()
+            self.relative_finaltime = self.relative_time
             warnings.warn(msg)
 
             # let's get out of here
             return
 
         N = len(self)                             # Number of triangles
-        self.yieldtime = self.get_time() + yieldstep    # set next yield time
+        
+        self.relative_yieldtime = self.relative_time + yieldstep     # set next relative yield time
+        self.yieldtime = self.relative_yieldtime + self.starttime    # set next yield time
 
         # Initialise interval of timestep sizes (for reporting only)
         # Note that we set recorded_min_timestep to be large so that it comes
@@ -1802,7 +1832,7 @@ class Generic_Domain(object):
             yield(self.get_time())      # Yield initial values
 
         while True:
-            initial_time = self.get_time()
+            initial_relative_time = self.relative_time
 
             # Apply fluid flow fractional step
             if self.get_timestepping_method() == 'euler':
@@ -1820,7 +1850,8 @@ class Generic_Domain(object):
             # Centroid Values of variables should be ok
 
             # Update time
-            self.set_time(initial_time + self.timestep)
+            #self.set_time(initial_time + self.timestep)
+            self.relative_time = initial_relative_time + self.timestep
 
             self.update_ghosts()
 
@@ -1832,11 +1863,13 @@ class Generic_Domain(object):
             if self._order_ == 1:
                 self.number_of_first_order_steps += 1
 
-            # Yield results
-            if self.finaltime is not None and\
-               self.get_time() >= self.finaltime - epsilon:
+            #print(self.relative_time, self.get_time())
 
-                if self.get_time() > self.finaltime:
+            # Yield results at finaltime
+            if self.relative_finaltime is not None and\
+               self.relative_time >= self.relative_finaltime - epsilon:
+
+                if self.relative_time > self.relative_finaltime:
                     # FIXME (Ole, 30 April 2006): Do we need this check?
                     # Probably not (Ole, 18 September 2008).
                     # Now changed to Exception.
@@ -1845,15 +1878,16 @@ class Generic_Domain(object):
 
                 # Distribute to vertices, log and then yield final time
                 # and stop
-                self.set_time(self.finaltime)
+                #self.set_time(self.finaltime)
+                self.set_relative_time(self.relative_finaltime)
                 self.distribute_to_vertices_and_edges()
                 self.update_boundary()
                 self.log_operator_timestepping_statistics()
                 yield(self.get_time())
                 break
 
-            # If we are at the next yield point
-            if self.get_time() >= self.yieldtime:
+            # Yield results at next yieldstep
+            if self.get_relative_time() >= self.relative_yieldtime:
                 # Yield (intermediate) time and allow inspection of domain
                 # if self.checkpoint is True:
                 #    self.store_checkpoint()
@@ -1867,7 +1901,9 @@ class Generic_Domain(object):
                 yield(self.get_time())
 
                 # Reinitialise
-                self.yieldtime += yieldstep  # Move to next yield
+                
+                self.relative_yieldtime += yieldstep
+                self.yieldtime = self.relative_yieldtime + self.starttime
                 self.recorded_min_timestep = self.evolve_max_timestep
                 self.recorded_max_timestep = self.evolve_min_timestep
                 self.number_of_steps = 0
@@ -2260,6 +2296,24 @@ class Generic_Domain(object):
     def set_fractional_step_operator(self, operator):
         self.fractional_step_operators.append(operator)
 
+
+    def set_fixed_flux_timestep(self, flux_timestep=None):
+        """Disable variable timestepping and manually set a fixed flux_timestep
+        
+        :param flux_timestep: [float, None] Either set fixed flux_flux_timestep or 
+                              disable with value None"""
+
+        if flux_timestep is None:
+            self.fixed_flux_timestep = None
+            return
+
+        if flux_timestep > 0.0:
+            self.fixed_flux_timestep = flux_timestep
+            return
+        else:
+            msg = 'flux_timestep needs to be greater than 0.0'
+            raise(Exception, msg)
+
     def update_timestep(self, yieldstep, finaltime):
         """Calculate the next timestep to take
         """
@@ -2267,6 +2321,10 @@ class Generic_Domain(object):
         # Protect against degenerate timesteps arising from isolated
         # triangles
         self.apply_protection_against_isolated_degenerate_timesteps()
+
+        # disable variable timestepping
+        if self.fixed_flux_timestep is not None:
+            self.flux_timestep = self.fixed_flux_timestep
 
         # self.timestep is calculated from speed of characteristics
         # Apply CFL condition here
@@ -2315,12 +2373,12 @@ class Generic_Domain(object):
         #       given time
 
         # Ensure that final time is not exceeded
-        if finaltime is not None and self.get_time() + timestep > finaltime:
-            timestep = finaltime - self.get_time()
+        if self.relative_finaltime is not None and self.relative_time + timestep > self.relative_finaltime:
+            timestep = self.relative_finaltime - self.relative_time
 
         # Ensure that model time is aligned with yieldsteps
-        if self.get_time() + timestep > self.yieldtime:
-            timestep = self.yieldtime - self.get_time()
+        if self.relative_time + timestep > self.relative_yieldtime:
+            timestep = self.relative_yieldtime - self.relative_time
 
         self.timestep = timestep
 

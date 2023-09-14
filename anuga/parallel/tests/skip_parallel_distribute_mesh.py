@@ -31,8 +31,11 @@ run_filename = os.path.join(path, 'run_parallel_distribute_mesh.py')
 
 
 
-@pytest.mark.skipif('mpi4py' not in sys.modules,
-                    reason="requires the mpi4py module")
+#@pytest.mark.skipif('mpi4py' not in sys.modules,
+#                    reason="requires the mpi4py module")
+#@pytest.mark.skipif(True,
+#                    reason="problem with metis 5 test with pymetis")
+@pytest.mark.skip
 class Test_parallel_distribute_mesh(unittest.TestCase):
     def setUp(self):
 
@@ -55,14 +58,14 @@ class Test_parallel_distribute_mesh(unittest.TestCase):
         # Run in parallel on 3 processes
         # --------------------
 
-        cmd = 'mpiexec -np 3 ' + extra_options + ' python ' + run_filename
+        cmd = 'mpiexec -np 3 ' + extra_options + ' python -u ' + run_filename
         if verbose:
             print(cmd)
 
         result = subprocess.run(cmd.split(), capture_output=True)
         if result.returncode != 0:
-            print(result.stdout)
-            print(result.stderr)
+            print(result.stdout.decode('UTF-8'))
+            print(result.stderr.decode('UTF-8'))
             raise Exception(result.stderr)
 
         if verbose:
@@ -73,7 +76,6 @@ class Test_parallel_distribute_mesh(unittest.TestCase):
         pass
 
     def test_that_sequential_and_parallel_outputs_are_identical(self):
-
         pass
            
 if __name__ == "__main__":

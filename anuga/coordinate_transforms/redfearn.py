@@ -6,7 +6,6 @@ downloaded from INTERGOVERNMENTAL COMMITTEE ON SURVEYING & MAPPING (ICSM)
 http://www.icsm.gov.au/icsm/
 
 """
-from __future__ import division, print_function
 from anuga.coordinate_transforms.geo_reference import Geo_reference, DEFAULT_ZONE
 
 import numpy as num
@@ -152,6 +151,11 @@ def redfearn(lat, lon, false_easting=None, false_northing=None,
     # Zone
     if zone is None:
         zone = int((lon - longitude_of_western_edge_zone0)/zone_width)
+
+        if zone > 60:
+            zone = zone - 60
+
+        assert (zone == -1 or (zone >= 1 and zone <= 60)), f'zone {zone} not valid.'
 
     # Central meridian
     if central_meridian is None:

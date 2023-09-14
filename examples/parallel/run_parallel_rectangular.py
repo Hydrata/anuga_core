@@ -4,9 +4,10 @@
 #
 #  Need mpi setup for your machine 
 #
-#  Run in parallel as follows (on 4 processors)
+#  To run in parallel on 4 processes, use the following
 #
-#  mpiexec -np 4 python run_parallel_sw_rectangular_cross.py
+#  mpiexec -np 4 python -u run_parallel_sw_rectangular_cross.py
+#
 #
 #  Note the use of "if myid == 0" to restrict some calculations 
 #  to just one processor, in particular the creation of a 
@@ -24,6 +25,8 @@
 import time
 import sys
 import math
+from xml import dom
+import anuga
 
 
 #----------------------------
@@ -41,17 +44,70 @@ from anuga import distribute, myid, numprocs, finalize, barrier
 
 t0 = time.time()
 
-verbose = True
+#----------------------------
+# simulation parameters
+#----------------------------
+refinement_factor = 100
+sqrtN = int((numprocs)**(1.0/2.0)*refinement_factor)
+
+sqrtN = 100
+length = 2.0
+width = 2.0
+
+yieldstep = 0.005
+finaltime = 0.015
+
+fixed_flux_timestep = 0.0
+
+import argparse
+parser = argparse.ArgumentParser(description='Rectangular')
+
+parser.add_argument('-ft', '--finaltime', type=float, default=finaltime,
+                    help='finaltime')
+parser.add_argument('-ys', '--yieldstep', type=float, default=yieldstep,
+                    help='yieldstep')
+parser.add_argument('-sn', '--sqrtN', type=int, default=sqrtN,
+                    help='Size of grid: 500 -> 1_000_000 triangles')
+parser.add_argument('-gl', '--ghost_layer', type=int, default=2,
+                    help='Size of ghost layer')
+
+parser.add_argument('-fdt', '--fixed_dt', type=float, default=fixed_flux_timestep,
+                    help='Set a fixed flux timestep')
+parser.add_argument('-ta', '--test_allreduce', action='store_true',
+                    help='run fixed timestep with dummy allreduce')
+
+parser.add_argument('-v', '--verbose', action='store_true', help='turn on verbosity')
+
+parser.add_argument('-ve', '--evolve_verbose', action='store_true', help='turn on evolve verbosity')
+
+args = parser.parse_args()
+
+if myid == 0: print(args)
+
+sqrtN = args.sqrtN
+yieldstep = args.yieldstep
+finaltime = args.finaltime
+verbose = args.verbose
+evolve_verbose = args.evolve_verbose
+fixed_flux_timestep = args.fixed_dt
+test_allreduce = args.test_allreduce
+
+dist_params = {}
+dist_params['ghost_layer_width'] = args.ghost_layer
+
+if fixed_flux_timestep == 0.0:
+    fixed_flux_timestep = None
+
+#print('fixed_flux_timestep ',fixed_flux_timestep)
+
+
+
 
 #--------------------------------------------------------------------------
 # Setup Domain only on processor 0
 #--------------------------------------------------------------------------
 if myid == 0:
-    length = 2.0
-    width = 2.0
-    #dx = dy = 0.005
-    #dx = dy = 0.00125
-    sqrtN = int(math.sqrt(numprocs))*4
+
     domain = rectangular_cross_domain(sqrtN, sqrtN,
                                       len1=length, len2=width, 
                                       origin=(-length/2, -width/2), 
@@ -63,16 +119,20 @@ if myid == 0:
     domain.set_quantity('stage', 1.0)
     domain.set_flow_algorithm('DE0')
     domain.set_name('sw_rectangle')
-    domain.print_statistics()
+ 
+    if verbose: domain.print_statistics()
 else:
     domain = None
 
 t1 = time.time()
 
-if myid == 0 :
-    print ('Create sequential domain: Time',t1-t0)
+creation_time = t1-t0
 
-if myid == 0 and verbose: 
+if myid == 0 :
+    print ('Creation of sequential domain: Time =',t1-t0)
+    print ('Creation of sequential domain: Number of Triangles =',domain.number_of_global_triangles)
+
+if myid == 0: 
     print ('DISTRIBUTING DOMAIN')
     sys.stdout.flush()
     
@@ -81,13 +141,23 @@ barrier()
 #-------------------------------------------------------------------------
 # Distribute domain
 #-------------------------------------------------------------------------
-domain = distribute(domain,verbose=verbose)
+domain = distribute(domain,verbose=verbose,parameters=dist_params)
 
+
+# FIXME: THis should be able to be set in the sequential domain
+domain.set_fixed_flux_timestep(fixed_flux_timestep)
+domain.set_CFL(1.0)
+if myid == 0: 
+    print('CFL ',domain.CFL)
+    print('fixed_flux_timestep ',domain.fixed_flux_timestep)
+domain.test_allreduce = test_allreduce
 
 t2 = time.time()
 
+distribute_time = t2-t1
+
 if myid == 0 :
-    print ('Distribute domain: Time ',t2-t1)
+    print ('Distribute domain: Time ',distribute_time)
     
 if myid == 0 : print ('After parallel domain')
 
@@ -96,7 +166,7 @@ T = Transmissive_boundary(domain)
 R = Reflective_boundary(domain)
 
 
-domain.set_boundary( {'left': R, 'right': R, 'bottom': R, 'top': R, 'ghost': None} )
+domain.set_boundary( {'left': R, 'right': R, 'bottom': R, 'top': R} )
 
 
 if myid == 0 : print ('After set_boundary')
@@ -108,9 +178,6 @@ setter = Set_stage(domain,center=(0.0,0.0), radius=0.5, stage = 2.0)
 setter()
 
 if myid == 0 : print ('After set quantity')
-
-yieldstep = 0.005
-finaltime = 0.05
 
 barrier()
 
@@ -125,26 +192,38 @@ for t in domain.evolve(yieldstep = yieldstep, finaltime = finaltime):
         sys.stdout.flush()
         
         
+evolve_time = time.time()-t0
+
+if myid == 0 :
+    print ('Evolve: Time',evolve_time)
+
+if evolve_verbose:
+    for p in range(numprocs):
+        barrier()
+        if myid == p:
+            print (50*'=')
+            print ('P%g' %(myid))
+            print ('That took %.2f seconds' %(evolve_time))
+            print ('Communication time %.2f seconds'%domain.communication_time)
+            print ('Reduction Communication time %.2f seconds'%domain.communication_reduce_time)
+            print ('Broadcast time %.2f seconds'%domain.communication_broadcast_time)
+            sys.stdout.flush()
 
 
-for p in range(numprocs):
-    barrier()
-    if myid == p:
-        print (50*'=')
-        print ('P%g' %(myid))
-        print ('That took %.2f seconds' %(time.time()-t0))
-        print ('Communication time %.2f seconds'%domain.communication_time)
-        print ('Reduction Communication time %.2f seconds'%domain.communication_reduce_time)
-        print ('Broadcast time %.2f seconds'%domain.communication_broadcast_time)
-        sys.stdout.flush()
 
-
-
-if domain.number_of_global_triangles < 5000:
+if domain.number_of_global_triangles < 10:
     if myid == 0 :
         print ('Create dump of triangulation for %g triangles' % domain.number_of_global_triangles)
     domain.dump_triangulation(filename="rectangular_cross_%g.png"% numprocs)
 
-domain.sww_merge(delete_old=True)
+# to save time avoid merge
+#domain.sww_merge(delete_old=True)
+
+
+if myid == 0:
+    print(80*'=')
+    print('np,ntri,ctime,dtime,etime')
+    msg = "%d,%d,%f,%f,%f"% (numprocs, domain.number_of_global_triangles, creation_time, distribute_time, evolve_time)
+    print(msg)
 
 finalize()

@@ -34,6 +34,7 @@ Description:
     The quantities are
 
     symbol    variable name    explanation
+
     x         x                horizontal distance from origin [m]
     y         y                vertical distance from origin [m]
     z         elevation        elevation of bed on which flow is modelled [m]
@@ -43,7 +44,7 @@ Description:
     v                          speed in the y direction [m/s]
     uh        xmomentum        momentum in the x direction [m^2/s]
     vh        ymomentum        momentum in the y direction [m^2/s]
-
+                             
     eta                        mannings friction coefficient [to appear]
     nu                         wind stress coefficient [to appear]
 
@@ -66,20 +67,18 @@ Reference:
 
 Constraints: See GPL license in the user guide
 """
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
+
+
+
 
 # Decorator added for profiling
 #------------------------------
 
-#rom past.builtins import str
-from builtins import range
-from past.utils import old_div
-from future.utils import raise_
+
 def profileit(name):
     def inner(func):
         def wrapper(*args, **kwargs):
+            import cProfile
             prof = cProfile.Profile()
             retval = prof.runcall(func, *args, **kwargs)
             # Note use of name from outer scope
@@ -155,19 +154,49 @@ class Domain(Generic_Domain):
 
     The quantities are
 
-    symbol    variable name    explanation
-    x         x                horizontal distance from origin [m]
-    y         y                vertical distance from origin [m]
-    z         elevation        elevation of bed on which flow is modelled [m]
-    h         height           water height above z [m]
-    w         stage            absolute water level, w = z+h [m]
-    u                          speed in the x direction [m/s]
-    v                          speed in the y direction [m/s]
-    uh        xmomentum        momentum in the x direction [m^2/s]
-    vh        ymomentum        momentum in the y direction [m^2/s]
+    .. list-table::
+        :widths: 25 25 50
+        :header-rows: 1
 
-    eta                        mannings friction coefficient [to appear]
-    nu                         wind stress coefficient [to appear]
+        * - symbol
+          - variable name
+          - explanation
+        * - x
+          - x
+          - horizontal distance from origin [m]
+        * - y
+          - y
+          - vertical distance from origin [m] 
+        * - z
+          - elevation
+          - elevation of bed on which flow is modelled [m]
+        * - h
+          - height
+          - water height above z [m]
+        * - w
+          - stage
+          - absolute water level, w = z+h [m]
+        * - u
+          -
+          - speed in the x direction [m/s]
+        * - v
+          - 
+          - speed in the y direction [m/s]
+        * - uh
+          - xmomentum
+          - momentum in the x direction [m^2/s]
+        * - vh
+          - ymomentum
+          - momentum in the y direction [m^2/s]
+        * -
+          - 
+          -
+        * - eta
+          - 
+          - mannings friction coefficient [to appear]
+        * - nu
+          - 
+          - wind stress coefficient [to appear]
 
     The conserved quantities are w, uh, vh
 
@@ -325,8 +354,8 @@ class Domain(Generic_Domain):
         # Work arrays [avoid allocate statements in compute_fluxes or extrapolate_second_order]
         self.edge_flux_work=num.zeros(len(self.edge_coordinates[:,0])*3) # Advective fluxes
         self.pressuregrad_work=num.zeros(len(self.edge_coordinates[:,0])) # Gravity related terms
-        self.x_centroid_work=num.zeros(old_div(len(self.edge_coordinates[:,0]),3))
-        self.y_centroid_work=num.zeros(old_div(len(self.edge_coordinates[:,0]),3))
+        self.x_centroid_work=num.zeros(len(self.edge_coordinates[:,0])//3)
+        self.y_centroid_work=num.zeros(len(self.edge_coordinates[:,0])//3)
 
         ############################################################################
         ## Local-timestepping information
@@ -344,7 +373,7 @@ class Domain(Generic_Domain):
         # Flag: should we update the extrapolation on the next extrapolation call?
         # (Only do this if one or more of the fluxes on that triangle will be computed on
         # the next timestep, assuming only the flux computation uses edge/vertex values)
-        self.update_extrapolation=num.zeros(old_div(len(self.edge_coordinates[:,0]),3)).astype(int)+1
+        self.update_extrapolation=num.zeros(len(self.edge_coordinates[:,0])//3).astype(int)+1
 
         # edge_timestep [wavespeed/radius] -- not updated every timestep
         self.edge_timestep=num.zeros(len(self.edge_coordinates[:,0]))+1.0e+100
@@ -1063,30 +1092,34 @@ class Domain(Generic_Domain):
         
         :param tz: either a timezone object or string
         
-        We recommend using the timezone provided by the pytz modules. 
-        Default is pytz.utc
+        We recommend using the ZoneInfo provided by zoneinfo. 
+        Default is ZoneInfo('UTC')
 
         Example: Set default timezone UTC
 
         >>> domain.set_timezone()
 
-        Example: Set timezone using pytz string
+        Example: Set timezone using tsdata string
 
         >>> domain.set_timezone('Australia/Syndey')
 
-        Example: Set timezone using pytz timezone
+        Example: Set timezone using ZoneInfo timezone
 
-        >>> new_tz = pytz.timezone('Australia/Sydney')
+        >>> from zoneinfo import ZoneInfo
+        >>> new_tz = ZoneInfo('Australia/Sydney')
         >>> domain.set_timezone(new_tz)
         """
 
-        import pytz
+        try:
+            from zoneinfo import ZoneInfo
+        except:
+            from backports.zoneinfo import ZoneInfo
 
         if tz is None:
-            new_tz = pytz.utc
+            new_tz = ZoneInfo('UTC')
         elif isinstance(tz,str):
-            new_tz = pytz.timezone(tz)
-        elif isinstance(tz, pytz.tzinfo.DstTzInfo):
+            new_tz = ZoneInfo(tz)
+        elif isinstance(tz, ZoneInfo):
             new_tz = tz
         else:
             msg = "Unknown timezone %s" % tz
@@ -1100,25 +1133,36 @@ class Domain(Generic_Domain):
 
         return self.timezone
 
-    def get_datetime(self):
-        """Retrieve datetime corresponding to current timestamp wrt to domain timezone"""
-
-        import pytz
+    def get_datetime(self, timestamp=None):
+        """Retrieve datetime corresponding to current timestamp wrt to domain timezone
+        
+        param: timestamp: return datetime corresponding to given timestamp"""
+        
         from datetime import datetime
-        utc_datetime = pytz.utc.localize(datetime.utcfromtimestamp(self.get_time()))
+
+        try:
+            from zoneinfo import ZoneInfo
+        except:
+            from backports.zoneinfo import ZoneInfo
+
+
+        if timestamp is None:
+            timestamp = self.get_time()
+        
+        utc_datetime = datetime.utcfromtimestamp(timestamp).replace(tzinfo=ZoneInfo('UTC'))
         current_dt = utc_datetime.astimezone(self.timezone)
         return current_dt
 
     def set_starttime(self, timestamp=0.0):
         """Set the starttime for the evolution
         
-        :param time: Either a float or a datetime object
+        :param timestamp: Either a float or a datetime object
         
         Essentially we use unix time as our absolute time. So 
         time = 0 corresponds to Jan 1st 1970 UTC
 
         Use naive datetime which will be localized to the domain timezone or
-        or use pytz.timezone.localize to set timezone of datetime.
+        or use zoneinfo.ZoneInfo to set the timezone of datetime.
         Don't use the tzinfo argument of datetime to set timezone as this does not work!
         
         Example: 
@@ -1127,8 +1171,8 @@ class Domain(Generic_Domain):
             calculations are all based on UTC. Note the timestamp, which is time in seconds
             from 1st Jan 1970 UTC.
         
-        >>> import pytz
         >>> import anuga
+        >>> from zoneinfo import ZoneInfo
         >>> from datetime import datetime
         >>> 
         >>> domain = anuga.rectangular_cross_domain(10,10)
@@ -1143,12 +1187,12 @@ class Domain(Generic_Domain):
             the `domain` timezone. Note the timestamp, which is time in seconds
             from 1st Jan 1970 UTC.
 
-        >>> import pytz
         >>> import anuga
+        >>> from zoneinfo import ZoneInfo
         >>> from datetime import datetime
         >>> 
         >>> domain = anuga.rectangular_cross_domain(10,10)
-        >>> AEST = pytz.timezone('Australia/Sydney')
+        >>> AEST = ZoneInfo('Australia/Sydney')
         >>> domain.set_timezone(AEST)
         >>> 
         >>> dt = datetime(2021,3,21,18,30)
@@ -1160,19 +1204,19 @@ class Domain(Generic_Domain):
 
             Setting timezone for the `domain`, and setting the timezone for the `datetime`. 
             Note the timestamp, which is time in seconds from 1st Jan 1970 UTC is the same
-            as teh previous example.
+            as the previous example.
 
-        >>> import pytz
         >>> import anuga
+        >>> from zoneinfo import ZoneInfo
         >>> from datetime import datetime
         >>> 
         >>> domain = anuga.rectangular_cross_domain(10,10)
         >>> 
-        >>> ACST = pytz.timezone('Australia/Adelaide')
+        >>> ACST = ZoneInfo('Australia/Adelaide')
         >>> domain.set_timezone(ACST)
         >>> 
-        >>> AEST = pytz.timezone('Australia/Sydney')
-        >>> dt = AEST.localize(datetime(2021,3,21,18,30))
+        >>> AEST = ZoneInfo('Australia/Sydney')
+        >>> dt = datetime(2021,3,21,18,30, tzinfo=AEST)
         >>> 
         >>> domain.set_starttime(dt)
         >>> print(domain.get_datetime(), 'TZ', domain.get_timezone(), 'Timestamp: ', domain.get_time())
@@ -1189,7 +1233,7 @@ class Domain(Generic_Domain):
 
         if isinstance(timestamp, datetime):
             if timestamp.tzinfo is None:
-                dt = self.timezone.localize(timestamp)
+                dt = timestamp.replace(tzinfo=self.timezone)
                 time = dt.timestamp()
             else:
                 time = timestamp.timestamp()
@@ -1200,6 +1244,16 @@ class Domain(Generic_Domain):
         self.starttime = time
         # starttime is now the origin for relative_time
         self.set_relative_time(0.0)
+
+    def get_starttime(self, datetime=False):
+        """return starttime, either as timestamp, or as a datetime"""
+
+        starttime = self.starttime
+
+        if not datetime:
+            return starttime
+        else:
+            return self.get_datetime(starttime)
 
 
     def set_store(self, flag=True):
@@ -1240,11 +1294,16 @@ class Domain(Generic_Domain):
 
 
         if checkpoint:
-            # create checkpoint directory if necessary
-            if not os.path.exists(checkpoint_dir):
-                os.mkdir(checkpoint_dir)
 
-            assert os.path.exists(checkpoint_dir)
+            from anuga import myid
+            # On processor 0 create checkpoint directory if necessary
+            if myid == 0:
+                if True:
+                    if not os.path.exists(checkpoint_dir):
+                        os.mkdir(checkpoint_dir)
+
+                    assert os.path.exists(checkpoint_dir)
+
             self.checkpoint_dir = checkpoint_dir
             if checkpoint_time is not None:
                 #import time
@@ -1830,7 +1889,7 @@ class Domain(Generic_Domain):
         if not self.compute_fluxes_method=='DE':
             msg='Boundary flux integral only supported for DE fluxes '+\
                 '(because computation of boundary_flux_sum is only implemented there)'
-            raise_(Exception, msg)
+            raise Exception(msg)
 
         flux_integral = self.boundary_flux_integral.boundary_flux_integral[0]
 
@@ -2252,7 +2311,7 @@ class Domain(Generic_Domain):
                 raise Exception('Unknown order')
         else:
             # Old code:
-            for name in domain.conserved_quantities:
+            for name in self.conserved_quantities:
                 Q = self.quantities[name]
 
                 if self._order_ == 1:
@@ -2524,14 +2583,14 @@ class Domain(Generic_Domain):
         #U.set_values(uh_C/(h_C + H0/h_C), location='centroids')
         #V.set_values(vh_C/(h_C + H0/h_C), location='centroids')
 
-        factor = old_div(h_C,(h_C*h_C + H0))
+        factor = h_C/(h_C*h_C + H0)
         u_C[:]  = uh_C*factor
         v_C[:]  = vh_C*factor
 
         #U.set_boundary_values(uh_B/(h_B + H0/h_B))
         #V.set_boundary_values(vh_B/(h_B + H0/h_B))
 
-        factor = old_div(h_B,(h_B*h_B + H0))
+        factor = h_B/(h_B*h_B + H0)
         u_B[:]  = uh_B*factor
         v_B[:]  = vh_B*factor
 
@@ -2589,8 +2648,8 @@ class Domain(Generic_Domain):
 
         :param float yieldstep: yield every yieldstep time period
         :param float outputstep: Output to sww file every outputstep time period. outputstep should be an integer multiple of yieldstep. 
-        :param float finaltime: evolve until finaltime (can be a float or a datetime object)
-        :param float duration: evolve for a time of length duration
+        :param float finaltime: evolve until finaltime (can be a float (secs) or a datetime object)
+        :param float duration: evolve for a time of length duration (secs)
         :param  boolean skip_inital_step: Can be used to restart a simulation (not often used). 
 
 
@@ -2604,21 +2663,24 @@ class Domain(Generic_Domain):
         from datetime import datetime
         if finaltime is not None:
             if isinstance(finaltime, datetime):
-                dt = self.timezone.localize(finaltime)
+                if finaltime.tzinfo is None:
+                    dt = finaltime.replace(tzinfo=self.timezone)
+                else:
+                    dt = finaltime
                 finaltime = dt.timestamp()
             else:
                 finaltime = float(finaltime)
-
 
         if outputstep is None:
             outputstep = yieldstep
 
         if yieldstep is None:
-            output_frequency = 1
+            self.output_frequency = 1
         else:
             msg = f'outputstep ({outputstep}) should be an integer multiple of yieldstep ({yieldstep})'
             output_frequency = outputstep/yieldstep
             assert float(output_frequency).is_integer(), msg
+            self.output_frequency = int(output_frequency)
 
         msg = 'Attribute self.beta_w must be in the interval [0, 2]'
         assert 0 <= self.beta_w <= 2.0, msg
@@ -2643,7 +2705,7 @@ class Domain(Generic_Domain):
             #print t , self.get_time()
             # Store model data, e.g. for subsequent visualisation
             if self.store:
-                if self.yieldstep_counter%output_frequency == 0:
+                if self.yieldstep_counter%self.output_frequency == 0:
                     self.store_timestep()
 
             if self.checkpoint:
@@ -2785,9 +2847,9 @@ class Domain(Generic_Domain):
             Cvh = vh.get_values(location='centroids', indices=[k])
 
             # Speeds in each direction
-            Vu = old_div(Vuh,(Vh + epsilon))
-            Eu = old_div(Euh,(Eh + epsilon))
-            Cu = old_div(Cuh,(Ch + epsilon))
+            Vu = Vuh/(Vh + epsilon)
+            Eu = Euh/(Eh + epsilon)
+            Cu = Cuh/(Ch + epsilon)
             name = 'U'
             message  = '    %s: vertex_values =  %.4f,\t %.4f,\t %.4f\n' \
                  % (name.ljust(qwidth), Vu[0], Vu[1], Vu[2])
@@ -2800,9 +2862,9 @@ class Domain(Generic_Domain):
 
             msg += message
 
-            Vv = old_div(Vvh,(Vh + epsilon))
-            Ev = old_div(Evh,(Eh + epsilon))
-            Cv = old_div(Cvh,(Ch + epsilon))
+            Vv = Vvh/(Vh + epsilon)
+            Ev = Evh/(Eh + epsilon)
+            Cv = Cvh/(Ch + epsilon)
             name = 'V'
             message  = '    %s: vertex_values =  %.4f,\t %.4f,\t %.4f\n' \
                  % (name.ljust(qwidth), Vv[0], Vv[1], Vv[2])
@@ -2817,9 +2879,9 @@ class Domain(Generic_Domain):
 
             # Froude number in each direction
             name = 'Froude (x)'
-            Vfx = old_div(Vu,(num.sqrt(g*Vh) + epsilon))
-            Efx = old_div(Eu,(num.sqrt(g*Eh) + epsilon))
-            Cfx = old_div(Cu,(num.sqrt(g*Ch) + epsilon))
+            Vfx = Vu/(num.sqrt(g*Vh + epsilon))
+            Efx = Eu/(num.sqrt(g*Eh + epsilon))
+            Cfx = Cu/(num.sqrt(g*Ch + epsilon))
 
             message  = '    %s: vertex_values =  %.4f,\t %.4f,\t %.4f\n'\
                  % (name.ljust(qwidth), Vfx[0], Vfx[1], Vfx[2])
@@ -2833,9 +2895,9 @@ class Domain(Generic_Domain):
             msg += message
 
             name = 'Froude (y)'
-            Vfy = old_div(Vv,(num.sqrt(g*Vh) + epsilon))
-            Efy = old_div(Ev,(num.sqrt(g*Eh) + epsilon))
-            Cfy = old_div(Cv,(num.sqrt(g*Ch) + epsilon))
+            Vfy = Vv/(num.sqrt(g*Vh + epsilon))
+            Efy = Ev/(num.sqrt(g*Eh + epsilon))
+            Cfy = Cv/(num.sqrt(g*Ch + epsilon))
 
             message  = '    %s: vertex_values =  %.4f,\t %.4f,\t %.4f\n'\
                  % (name.ljust(qwidth), Vfy[0], Vfy[1], Vfy[2])
@@ -3056,7 +3118,7 @@ class Domain(Generic_Domain):
         vh = self.quantities['ymomentum'].centroid_values
         d =  self.quantities['stage'].centroid_values - self.quantities['elevation'].centroid_values
         d = num.maximum(d, threshold_depth)
-        v = old_div(( (uh)**2 + (vh)**2)**0.5,d)
+        v = ( (uh)**2 + (vh)**2)**0.5/d
         v = v*(d>threshold_depth)
 
         for i in range(numprocs):
@@ -3064,7 +3126,7 @@ class Domain(Generic_Domain):
                 print('    Processor ', myid)
                 gravSpeed=(g*d)**0.5
                 waveSpeed = abs(v)+gravSpeed
-                localTS=old_div(self.radii,num.maximum(waveSpeed, epsilon))
+                localTS=self.radii/num.maximum(waveSpeed, epsilon)
                 controlling_pt_ind=localTS.argmin()
                 print('    * Smallest LocalTS is: ', localTS[controlling_pt_ind])
                 print('     -- Location: ', round(self.centroid_coordinates[controlling_pt_ind,0]+self.geo_reference.xllcorner,2),\
@@ -3309,7 +3371,7 @@ def distribute_using_vertex_limiter(domain):
                 raise Exception('Unknown order')
 
     # Take bed elevation into account when water heights are small
-    balance_deep_and_shallow(domain)
+    domain.balance_deep_and_shallow()
 
     # Compute edge values by interpolation
     for name in domain.conserved_quantities:
@@ -3469,7 +3531,7 @@ def linear_friction(domain):
     for k in range(num_tris):
         if tau[k] >= eps:
             if h[k] >= eps:
-                S = old_div(-tau[k],h[k])
+                S = -tau[k]/h[k]
 
                 #Update momentum
                 xmom_update[k] += S*uh[k]
@@ -3530,7 +3592,7 @@ def depth_dependent_friction(domain, default_friction,
         elif d_vals[i] >= d2:
             ddf = n2
         else:
-            ddf = n1 + (old_div((n2-n1),(d2-d1)))*(d_vals[i]-d1)
+            ddf = n1 + ((n2-n1)/(d2-d1))*(d_vals[i]-d1)
 
         # check sanity of result
         if (ddf  < 0.010 or \

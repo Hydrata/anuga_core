@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 
-from __future__ import print_function
-from __future__ import division
-from builtins import zip
-from builtins import map
-from builtins import str
-from builtins import range
-from past.utils import old_div
+
+
+# from builtins import zip
+# from builtins import map
+# from builtins import str
+# from builtins import range
 import unittest
 from math import sqrt, pi
 import tempfile
@@ -26,6 +25,13 @@ from anuga.geometry.polygon import *
 import numpy as num
 import pprint
 
+def zone_letter_to_hemisphere(zone_letter):
+    hemisphere = 'undefined'
+    if zone_letter.lower() in 'cdefghjklm':
+        hemisphere = 'southern'
+    if zone_letter.lower() in 'npqrstuvwx':
+        hemisphere = 'northern'
+    return hemisphere
 
 #Aux for fit_interpolate.fit example
 def linear_function(point):
@@ -2155,6 +2161,309 @@ Parameters
         except:
             pass
 
+
+    def test_set_values_from_ll_tif_file_north(self):
+
+        #Mesh in zone 56 (relative coords) southern hemisphere
+
+        from pprint import pprint
+
+        # We need to make a .tif with ll coord which covers domain
+        #
+        from anuga.utilities import plot_utils as util
+        import numpy
+        #
+        # Use Make_Geotif to make tif file
+        # Pick a domain that makes sense in EPSG:32656
+        lat_ll, lon_ll = 34.37, 150.90
+        lat_ur, lon_ur = 34.39, 150.92
+
+        import utm
+        utm_east_ll, utm_north_ll, zone_ll, zone_letter_ll = utm.from_latlon(lat_ll, lon_ll)
+        utm_east_ur, utm_north_ur, zone_ur, zone_letter_ur = utm.from_latlon(lat_ur, lon_ur)
+
+        hemisphere_ll = zone_letter_to_hemisphere(zone_letter_ll)
+        hemisphere_ur = zone_letter_to_hemisphere(zone_letter_ur)
+        
+        lat = numpy.linspace(lat_ll, lat_ur, 11)
+        lon = numpy.linspace(lon_ll, lon_ur, 11)
+        
+        xG, yG = numpy.meshgrid(lon, lat)
+        
+        xG = xG.flatten()
+        yG = yG.flatten()
+        # Surface is z=x+y
+
+        fakeZ = (xG-min(xG))/(max(xG)-min(xG))+(yG - min(yG))/(max(yG)-min(yG))
+
+        #pprint(fakeZ.reshape((11,11)))
+
+        dataToGrid = numpy.vstack([xG, yG, fakeZ]).transpose()
+        #
+        # Create file PointData_lat_long.tif
+        util.Make_Geotif(dataToGrid, output_quantities=['lat_long'],
+                        EPSG_CODE=4326, output_dir='.', CellSize=0.0001)
+
+        tif_file = 'PointData_lat_long.tif'
+
+        # Create a domain and quantity
+        x0 = utm_east_ll
+        y0 = utm_north_ll
+
+        a = [0.0, 0.0]
+        b = [0.0, 500.0]
+        c = [500.0, 0.0]
+        d = [0.0, 1000.0]
+        e = [500.0, 500.0]
+        f = [1000.0, 0.0]
+
+        points = [a, b, c, d, e, f]
+
+        #bac, bce, ecf, dbe
+        elements = [[1, 0, 2], [1, 2, 4], [4, 2, 5], [3, 1, 4]]
+
+        mesh4 = Generic_Domain(points, elements,
+                               geo_reference=Geo_reference(56, x0, y0, hemisphere=hemisphere_ll))
+        mesh4.check_integrity()
+
+        quantity1 = Quantity(mesh4)
+
+        # Read in an interpolate from tif file
+        quantity1.set_values_from_tif_file(filename=tif_file , location='vertices')
+
+        #pprint(quantity1.centroid_values)
+        #pprint(quantity1.vertex_values)
+
+        centroid_values_ex = numpy.array(
+            [0.17639186, 0.34223889, 0.44878893, 0.72498227])
+        vertex_values_ex = numpy.array([[0.23654294, 0., 0.29263264],
+                                        [0.23654294, 0.29263264, 0.4975411],
+                                        [0.4975411, 0.29263264, 0.55619305],
+                                        [1.44086277, 0.23654294, 0.4975411]])
+
+
+        assert num.allclose(quantity1.centroid_values, centroid_values_ex)
+        assert num.allclose(quantity1.vertex_values, vertex_values_ex)
+
+        quantity2 = Quantity(mesh4)
+
+        # Read in an interpolate from tif file
+        quantity2.set_values(filename=tif_file , location='vertices')
+
+        #pprint(quantity2.centroid_values)
+        #pprint(quantity2.vertex_values)
+
+
+        assert num.allclose(quantity2.centroid_values, centroid_values_ex)
+        assert num.allclose(quantity2.vertex_values, vertex_values_ex)
+
+        #Cleanup
+        import os
+        os.remove(tif_file)
+
+    def test_set_values_from_ll_tif_file_south(self):
+
+        #Mesh in zone 56 (relative coords) southern hemisphere
+
+        from pprint import pprint
+
+        # We need to make a .tif with ll coord which covers domain
+        #
+        from anuga.utilities import plot_utils as util
+        import numpy
+        #
+        # Use Make_Geotif to make tif file
+        # Pick a domain that makes sense in EPSG:32756
+        lat_ll, lon_ll = -34.39, 150.90
+        lat_ur, lon_ur = -34.37, 150.92
+
+        import utm
+        utm_east_ll, utm_north_ll, zone_ll, zone_letter_ll = utm.from_latlon(lat_ll, lon_ll)
+        utm_east_ur, utm_north_ur, zone_ur, zone_letter_ur = utm.from_latlon(lat_ur, lon_ur)
+
+        hemisphere_ll = zone_letter_to_hemisphere(zone_letter_ll)
+        hemisphere_ur = zone_letter_to_hemisphere(zone_letter_ur)
+        
+        lat = numpy.linspace(lat_ll, lat_ur, 11)
+        lon = numpy.linspace(lon_ll, lon_ur, 11)
+        
+        xG, yG = numpy.meshgrid(lon, lat)
+        
+        xG = xG.flatten()
+        yG = yG.flatten()
+        # Surface is z=x+y
+
+        fakeZ = (xG-min(xG))/(max(xG)-min(xG))+(yG - min(yG))/(max(yG)-min(yG))
+
+        #pprint(fakeZ.reshape((11,11)))
+
+        dataToGrid = numpy.vstack([xG, yG, fakeZ]).transpose()
+        #
+        # Create file PointData_lat_long.tif
+        util.Make_Geotif(dataToGrid, output_quantities=['lat_long'],
+                        EPSG_CODE=4326, output_dir='.', CellSize=0.0001)
+
+        tif_file = 'PointData_lat_long.tif'
+
+        # Create a domain and quantity
+        x0 = utm_east_ll
+        y0 = utm_north_ll
+
+        a = [0.0, 0.0]
+        b = [0.0, 500.0]
+        c = [500.0, 0.0]
+        d = [0.0, 1000.0]
+        e = [500.0, 500.0]
+        f = [1000.0, 0.0]
+
+        points = [a, b, c, d, e, f]
+
+        #bac, bce, ecf, dbe
+        elements = [[1, 0, 2], [1, 2, 4], [4, 2, 5], [3, 1, 4]]
+
+        mesh4 = Generic_Domain(points, elements,
+                               geo_reference=Geo_reference(56, x0, y0, hemisphere=hemisphere_ll))
+        mesh4.check_integrity()
+
+        quantity1 = Quantity(mesh4)
+
+        # Read in an interpolate from tif file
+        quantity1.set_values_from_tif_file(filename=tif_file , location='vertices')
+
+        #pprint(quantity1.centroid_values)
+        #pprint(quantity1.vertex_values)
+
+        centroid_values_ex = numpy.array(
+            [0.17640652, 0.34250694, 0.44839957, 0.39855834])
+        vertex_values_ex = numpy.array([[0.23744977, 0., 0.2917698],
+                                        [0.23744977, 0.2917698, 0.49830124],
+                                        [0.49830124, 0.2917698, 0.55512768],
+                                        [0.45992401, 0.23744977, 0.49830124]])
+
+
+        assert num.allclose(quantity1.centroid_values, centroid_values_ex)
+        assert num.allclose(quantity1.vertex_values, vertex_values_ex)
+
+
+        quantity2 = Quantity(mesh4)
+
+        # Read in an interpolate from tif file
+        quantity2.set_values(filename=tif_file , location='vertices')
+
+        #pprint(quantity2.centroid_values)
+        #pprint(quantity2.vertex_values)
+
+
+        assert num.allclose(quantity2.centroid_values, centroid_values_ex)
+        assert num.allclose(quantity2.vertex_values, vertex_values_ex)
+
+
+
+        #Cleanup
+        import os
+        os.remove(tif_file)
+
+
+    def test_set_values_from_utm_tif_file(self):
+
+        #Mesh in zone 56 (relative coords) southern hemisphere
+
+        from pprint import pprint
+
+        # We need to make a .tif with ll coord which covers domain
+        #
+        from anuga.utilities import plot_utils as util
+        import numpy
+        #
+        # Use Make_Geotif to make tif file
+        # Pick a domain that makes sense in EPSG:32756
+        lat_ll, lon_ll = -34.39, 150.90
+        lat_ur, lon_ur = -34.37, 150.92
+
+        import utm
+        utm_east_ll, utm_north_ll, zone_ll, zone_letter_ll = utm.from_latlon(lat_ll, lon_ll)
+        utm_east_ur, utm_north_ur, zone_ur, zone_letter_ur = utm.from_latlon(lat_ur, lon_ur)
+
+        hemisphere_ll = zone_letter_to_hemisphere(zone_letter_ll)
+        hemisphere_ur = zone_letter_to_hemisphere(zone_letter_ur)
+
+
+        easting = numpy.linspace(utm_east_ll, utm_east_ur, 11)
+        northing = numpy.linspace(utm_north_ll, utm_north_ur, 11)
+        
+        xG, yG = numpy.meshgrid(easting, northing)
+        
+        xG = xG.flatten()
+        yG = yG.flatten()
+        # Surface is z=x+y
+
+        fakeZ = (xG-min(xG))/(max(xG)-min(xG))+(yG - min(yG))/(max(yG)-min(yG))
+
+        #pprint(fakeZ.reshape((11,11)))
+
+        dataToGrid = numpy.vstack([xG, yG, fakeZ]).transpose()
+        #
+        # Create file PointData_lat_long.tif
+        util.Make_Geotif(dataToGrid, output_quantities=['utm'],
+                        EPSG_CODE=32756, output_dir='.', CellSize=10)
+
+        tif_file = 'PointData_utm.tif'
+
+        # Create a domain and quantity
+        x0 = utm_east_ll
+        y0 = utm_north_ll
+
+        a = [0.0, 0.0]
+        b = [0.0, 500.0]
+        c = [500.0, 0.0]
+        d = [0.0, 1000.0]
+        e = [500.0, 500.0]
+        f = [1000.0, 0.0]
+
+        points = [a, b, c, d, e, f]
+
+        #bac, bce, ecf, dbe
+        elements = [[1, 0, 2], [1, 2, 4], [4, 2, 5], [3, 1, 4]]
+
+        mesh4 = Generic_Domain(points, elements,
+                               geo_reference=Geo_reference(56, x0, y0, hemisphere=hemisphere_ll))
+        mesh4.check_integrity()
+
+        quantity1 = Quantity(mesh4)
+
+        # Read in an interpolate from tif file
+        quantity1.set_values_from_tif_file(filename=tif_file , location='vertices')
+
+        #pprint(quantity1.centroid_values)
+        #pprint(quantity1.vertex_values)
+
+        centroid_values_ex = numpy.array(
+            [0.17610394, 0.34143136, 0.45676157, 0.39509157])
+        vertex_values_ex = numpy.array([[0.23454617, 0., 0.29376566],
+                                        [0.23454617, 0.29376566, 0.49598226],
+                                        [0.49598226, 0.29376566, 0.58053678],
+                                        [0.45474628, 0.23454617, 0.49598226]])
+
+        assert num.allclose(quantity1.centroid_values, centroid_values_ex)
+        assert num.allclose(quantity1.vertex_values, vertex_values_ex)
+
+
+        quantity2 = Quantity(mesh4)
+
+        # Read in an interpolate from tif file
+        quantity2.set_values(filename=tif_file , location='vertices')
+
+        #pprint(quantity2.centroid_values)
+        #pprint(quantity2.vertex_values)
+
+
+        assert num.allclose(quantity2.centroid_values, centroid_values_ex)
+        assert num.allclose(quantity2.vertex_values, vertex_values_ex)
+
+        #Cleanup
+        import os
+        os.remove(tif_file)
+
     def test_set_values_from_quantity(self):
 
         quantity1 = Quantity(self.mesh4)
@@ -2512,7 +2821,7 @@ Parameters
         #Assert that quantities are conserved
         for k in range(quantity.centroid_values.shape[0]):
             assert num.allclose(quantity.centroid_values[k],
-                                old_div(num.sum(quantity.vertex_values[k, :]),3))
+                                num.sum(quantity.vertex_values[k, :])/3)
 
     def test_limit_vertices_by_all_neighbours(self):
         quantity = Quantity(self.mesh4)
@@ -2536,7 +2845,7 @@ Parameters
         #Assert that quantities are conserved
         for k in range(quantity.centroid_values.shape[0]):
             assert num.allclose(quantity.centroid_values[k],
-                                old_div(num.sum(quantity.vertex_values[k, :]),3))
+                                num.sum(quantity.vertex_values[k, :])/3)
 
     def test_limit_edges_by_all_neighbours(self):
         quantity = Quantity(self.mesh4)
@@ -2560,7 +2869,7 @@ Parameters
         #Assert that quantities are conserved
         for k in range(quantity.centroid_values.shape[0]):
             assert num.allclose(quantity.centroid_values[k],
-                                old_div(num.sum(quantity.vertex_values[k, :]),3))
+                                num.sum(quantity.vertex_values[k, :])/3)
 
     def test_limit_edges_by_neighbour(self):
         quantity = Quantity(self.mesh4)
@@ -2584,7 +2893,7 @@ Parameters
         #Assert that quantities are conserved
         for k in range(quantity.centroid_values.shape[0]):
             assert num.allclose(quantity.centroid_values[k],
-                                old_div(num.sum(quantity.vertex_values[k, :]),3))
+                                num.sum(quantity.vertex_values[k, :])/3)
 
     def test_limiter2(self):
         """Taken from test_shallow_water
@@ -2613,7 +2922,7 @@ Parameters
         #Assert that quantities are conserved
         for k in range(quantity.centroid_values.shape[0]):
             assert num.allclose(quantity.centroid_values[k],
-                                old_div(num.sum(quantity.vertex_values[k, :]),3))
+                                num.sum(quantity.vertex_values[k, :])/3)
 
     def test_distribute_first_order(self):
         quantity = Quantity(self.mesh4)
@@ -2701,10 +3010,10 @@ Parameters
         timestep = 0.1
         quantity.update(timestep)
 
-        sem = old_div(num.array([1., 1., 1., 1.]),num.array([1, 2, 3, 4]))
+        sem = num.array([1., 1., 1., 1.])/num.array([1, 2, 3, 4])
         denom = num.ones(4, float)-timestep*sem
 
-        x = old_div(num.array([1, 2, 3, 4]),denom)
+        x = num.array([1, 2, 3, 4])/denom
         assert num.allclose(quantity.centroid_values, x)
 
     def test_both_updates(self):
@@ -2724,7 +3033,7 @@ Parameters
         timestep = 0.1
         quantity.update(0.1)
 
-        sem = old_div(num.array([1., 1., 1., 1.]),num.array([1, 2, 3, 4]))
+        sem = num.array([1., 1., 1., 1.])/num.array([1, 2, 3, 4])
         denom = num.ones(4, float)-timestep*sem
 
         x = num.array([1., 2., 3., 4.])

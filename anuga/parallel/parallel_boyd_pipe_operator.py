@@ -1,8 +1,4 @@
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import division
-from builtins import str
-from past.utils import old_div
+
 import anuga
 import math
 import numpy
@@ -118,8 +114,8 @@ class Parallel_Boyd_pipe_operator(Parallel_Structure_operator):
         self.case = 'N/A'
 
 
-        print(80*'=')
-        print("DON'T USE BOYD PIPES AS ALGORITHM NOT VERIFIED YET")
+        #print(80*'=')
+        #print("DON'T USE BOYD PIPES AS ALGORITHM NOT VERIFIED YET")
 
 
         # May/June 2014 -- allow 'smoothing ' of driving_energy, delta total energy, and outflow_enq_depth

@@ -74,10 +74,13 @@ echo "+===============================================+"
 #sudo apt-get update
 sudo apt-get install -y gdal-bin libgdal-dev
 
+#sudo apt-get install -y libgdal1-dev
+
 echo "+===============================================+"
 echo "|  GDAL version                                 |"
 echo "+===============================================+"
 ogrinfo --version
+#gdal-config --version
 #export CPLUS_INCLUDE_PATH=/usr/include/gdal
 #export C_INCLUDE_PATH=/usr/include/gdal
 
@@ -92,15 +95,17 @@ echo "|  Using pip to install matplotlib              |"
 echo "+===============================================+"
 python -m pip  install -q matplotlib
 
-#echo "+===============================================+"
-#echo "|  Using pip to install gdal                    |"
-#echo "+===============================================+"
+echo "+===============================================+"
+echo "|  Using pip to install gdal                    |"
+echo "+===============================================+"
+python -m pip  install setuptools==58
 python -m pip  install -q GDAL==3.0.4
+#python -m pip  install -q pygdal==3.0.4.11
 
 echo "+===============================================+"
-echo "|  Using pip to install nose and pytest         |"
+echo "|  Using pip to install pytest                  |"
 echo "+===============================================+"
-python -m pip  install -q nose pytest
+python -m pip  install -q pytest
 
 echo "+===============================================+"
 echo "|  Using pip to install dill                    |"
@@ -130,7 +135,7 @@ python -m pip install -q gitpython
 echo "+===============================================+"
 echo "|  Using pip to install pyproj                  |"
 echo "+===============================================+"
-python -m pip  install -q pyproj
+python -m pip  install -q pyproj affine
 
 echo "+===============================================+"
 echo "|  Using pip to install pymetis                 |"

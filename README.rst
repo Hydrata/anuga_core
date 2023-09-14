@@ -9,15 +9,23 @@
 
 .. image:: https://img.shields.io/pypi/v/anuga.svg
     :target: https://pypi.python.org/pypi/anuga/
-    :alt: Latest Version
+    :alt: Latest PyPi Version
+
+.. image:: https://img.shields.io/pypi/dm/anuga.svg
+    :target: https://pypistats.org/packages/anuga
+    :alt: PyPi download statistics
+
+.. image:: https://img.shields.io/conda/vn/conda-forge/anuga.svg
+    :target: https://anaconda.org/conda-forge/anuga
+    :alt: Latest Conda Version
+ 
+.. image:: https://img.shields.io/conda/dn/conda-forge/anuga.svg
+    :target: https://anaconda.org/conda-forge/anuga
+    :alt: Conda Forge download statistics
 
 .. image:: https://readthedocs.org/projects/anuga/badge/?version=latest
     :target: https://anuga.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
-
-.. image:: https://img.shields.io/pypi/dm/anuga.svg
-    :target: https://pypistats.org/packages/anuga
-    :alt: Python package index download statistics
 
 
 =====
@@ -36,11 +44,8 @@ and floods.
 ANUGA is a python 3 package with some C and Cython extensions (and an optional
 fortran extension). 
 
-ANUGA is developed at Geoscience Australia, Mathematical Sciences Institute at the
-Australian National University and volunteers. 
-
-Althought ANUGA was created in a collaboration by Geoscience Australia and Mathematical Sciences Institute at the
-Australian National University, it is now developed and maintained by a community of volunteers.
+ANUGA was created in a collaboration by Geoscience Australia and Mathematical Sciences Institute at the
+Australian National University, though now it is further developed and maintained by a community of volunteers.
 
 Copyright Commonwealth of Australia (Geoscience Australia) and Australian National University 2004-Now
 
@@ -52,23 +57,40 @@ ANUGA is available from either https://github.com/anuga-community/anuga_core or 
 
 The Python 3.x version is the default and available in the main branches of both repositories. 
 
-If you rely on the deprecated Python 2.7 version, it is available in branches named anuga_py2.
+If you rely on the old Python 2.7 version, it is available in branches named anuga_py2.
 
-The python 3 version of ANUGA will continue to be developed and the most up-to-date versions will be available from the `anuga-community <https://github.com/anuga-community/anuga_core>`_ repository. 
+The python 3 version of ANUGA will continue to be developed and the most up-to-date 
+versions will be available from the `anuga-community <https://github.com/anuga-community/anuga_core>`_ repository. 
 
 
 
 Installation
 ------------
 
-For installation instructions, see https://anuga.readthedocs.io/en/latest/installation.html
+If you use `conda` to provide your `python` environment, then you can install `anuga` from the conda-forge channel
+as follows. First setup the `conda-forge` channel:
+
+.. code-block::
+
+    conda config --add channels conda-forge
+    conda config --set channel_priority strict
+
+
+Once the conda-forge channel has been enabled, anuga can be installed with conda:
+
+.. code-block::
+
+    conda install anuga
+
+
+For more installation instructions, see https://anuga.readthedocs.io/en/latest/installation.html
 
 
 Documentation and Help
 ----------------------
 
 
-ANUGA documentation is available via read the docs at 
+ANUGA documentation is available via "read the docs" at 
 
     https://anuga.readthedocs.io 
 
@@ -94,6 +116,10 @@ and send questions using the address
 
     anuga-user@lists.sourceforge.net
 
+You can also submit issues to:
+
+    https://github.com/anuga-community/anuga_core/issues
+
 
 Web sites
 ---------
@@ -115,9 +141,10 @@ The latest development version of ANUGA's sources are is available at:
 
 They can be downloaded as a zip file or using the Git client as follows
 
-    `git clone https://github.com/anuga-community/anuga_core` (for read only)
-    
-    `git clone git@github.com:anuga-community/anuga_core.git` (to contribute)
+.. code-block::
+
+    git clone https://github.com/anuga-community/anuga_core #(for read only)
+    git clone git@github.com:anuga-community/anuga_core.git #(to contribute)
 
 For the latter option see e.g. https://help.github.com/articles/adding-a-new-ssh-key-to-your-github-account/ for instructions on how to authenticate using ssh keys.
 
@@ -145,8 +172,8 @@ and a DISCLAIMER OF ALL WARRANTIES.
 
 Contacts
 --------
-At the Australian National University:
 
+At the Australian National University:
 **Stephen Roberts**
 *Lead Developer*
 <stephen.roberts@anu.edu.au>

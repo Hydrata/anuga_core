@@ -24,7 +24,7 @@ MAINTAINER_EMAIL = 'stephen.roberts@anu.edu.au'
 URL = "https://github.com/anuga-community/anuga_core"
 LICENSE = 'GPL'
 DOWNLOAD_URL = "http://sourceforge.net/projects/anuga/"
-VERSION = '3.1.9'
+VERSION = '3.2.0dev'
 #===============================================================================
 
 
@@ -45,14 +45,12 @@ SETUPTOOLS_COMMANDS = set([
 
 if len(SETUPTOOLS_COMMANDS.intersection(sys.argv)) > 0:
     import setuptools
-    extra_setuptools_args = dict(
-        zip_safe=False,  # the package can run out of an .egg file
-        include_package_data=True,
-      	install_requires=['cython',
+    import platform
+    install_requires = ['cython',
                          'numpy',
                          'dill',
                          'future',
-                         'gdal >= 3.0.4'
+                         'gdal >= 3.0.4',
                          'gitpython',
                          'matplotlib',
                          'meshpy',
@@ -60,9 +58,16 @@ if len(SETUPTOOLS_COMMANDS.intersection(sys.argv)) > 0:
                          'Pmw',
                          'pymetis',
                          'pytest',
-                         'pytz',
                          'scipy',
                          'utm']
+    version_tuple = platform.python_version_tuple()
+    if version_tuple[0] == '3' and int(version_tuple[1]) < 9 :
+        install_requires.append('backports.zoneinfo')
+
+    extra_setuptools_args = dict(
+        zip_safe=False,  # the package can run out of an .egg file
+        include_package_data=True,
+      	install_requires=install_requires
     )
 else:
     extra_setuptools_args = dict()
@@ -134,6 +139,7 @@ def setup_package():
                                  'Programming Language :: Python :: 3.8',
                                  'Programming Language :: Python :: 3.9',
                                  'Programming Language :: Python :: 3.10',
+                                 'Programming Language :: Python :: 3.11',
                                  ],
                     cmdclass={'clean': CleanCommand},
                     **extra_setuptools_args)
