@@ -75,10 +75,7 @@ DEBUG = logging.DEBUG
 NOTSET = logging.NOTSET
 
 # set _new_python to True if python version 2.5 or later
-# _new_python = (sys.version_info[0]*10 + sys.version_info[1] >= 25)      # 2.5.x.x
-#  disabling this logging for hydrata as the non-standard keys break the upstream
-#  loggers.
-_new_python = False
+_new_python = (sys.version_info[0]*10 + sys.version_info[1] >= 25)      # 2.5.x.x
 
 
 
