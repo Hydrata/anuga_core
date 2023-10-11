@@ -111,7 +111,8 @@ class Test_csv2sts(unittest.TestCase):
 
         if not sys.platform == 'win32':
             # Windows cannot delete the file for some reason.
-            os.remove(sts_out)           
+            pass
+            # os.remove(sts_out)
 
 if __name__ == "__main__":
     suite = unittest.makeSuite(Test_csv2sts,'test')
