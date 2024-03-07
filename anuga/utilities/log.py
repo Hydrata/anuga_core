@@ -105,7 +105,7 @@ def log(msg, level=None):
 
         # setup the file logging system
         if _new_python:
-            fmt = '%(asctime)s %(levelname)-8s %(mname)25s:%(lnum)-4d|%(message)s'
+            fmt = '%(asctime)s %(levelname)-8s %(module)25s:%(lineno)-4d|%(message)s'
         else:
             fmt = '%(asctime)s %(levelname)-8s|%(message)s'
         logging.basicConfig(level=log_logging_level, format=fmt,
