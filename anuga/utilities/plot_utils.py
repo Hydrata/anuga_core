@@ -1187,7 +1187,7 @@ def Make_Geotif(swwFile=None,
                 if(myTSi == 'max'):
                     timestepString = 'max'
                 else:
-                    timestepString = str(myTimeStep[myTSindex])+'_Time_'+str(round(p2.time[myTS]))
+                    timestepString = str(myTimeStep[myTSindex])+'_Time_'+str(round(p2.time[myTS])).zfill(6)
             elif(myTS == 'pointData'):
                 gridq = myInterpFun(xyzPoints[:,2])
 
