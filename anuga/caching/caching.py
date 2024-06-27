@@ -1858,7 +1858,7 @@ def checkdir(CD, verbose=None, warn=False):
       if verbose: log.critical('MESSAGE: Directory %s created.' % CD)
     except:
       if warn is True:
-        log.critical('WARNING: Directory %s could not be created.' % CD)
+        log.critical('WARNING: Directory %s could not be created by caching.' % CD)
       if unix:
         CD = '/tmp/'
       else:

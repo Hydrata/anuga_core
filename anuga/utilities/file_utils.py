@@ -70,7 +70,7 @@ def check_dir(path, verbose=None):
             if verbose:
                 log.critical('MESSAGE: Directory %s created.' % path)
         except:
-            log.critical('WARNING: Directory %s could not be created.' % path)
+            log.critical('WARNING: Directory %s could not be created by file_utils.' % path)
             if unix:
                 try:
                     path = os.environ['TMPDIR']
