@@ -19,25 +19,14 @@ domain = load_last_checkpoint_file(domain_name, checkpoint_dir)
 from anuga import send, receive, myid, numprocs, barrier
 from time import time as walltime
 import os
-import logging
-
-logger = logging.getLogger('debug_checkpoints')
-logger.setLevel(logging.DEBUG)
-handler = logging.FileHandler('debug_checkpoints.log')
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
 
 
 def load_checkpoint_file(domain_name = 'domain', checkpoint_dir = '.', time = None):
 
     from os.path import join
-    logger.info(f"1 {domain_name=}")
 
     if numprocs > 1:
         domain_name = domain_name+'_P{}_{}'.format(numprocs,myid)
-    logger.info(f"{numprocs=}")
-    logger.info(f"2 {domain_name=}")
 
 
     if time is None:
@@ -49,7 +38,6 @@ def load_checkpoint_file(domain_name = 'domain', checkpoint_dir = '.', time = No
         #print times
     else:
         times = [float(time)]
-    logger.info(f"{times=}")
 
     if len(times) == 0: raise Exception("Unable to open checkpoint file")
 
@@ -57,8 +45,6 @@ def load_checkpoint_file(domain_name = 'domain', checkpoint_dir = '.', time = No
 
         pickle_name = join(checkpoint_dir,domain_name)+'_'+str(time)+'.pickle'
         #print pickle_name
-        logger.info(f"{pickle_name=}")
-        logger.info(f"{os.path.isfile(pickle_name)}")
 
         try:
             try:
