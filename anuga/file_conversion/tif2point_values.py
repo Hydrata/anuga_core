@@ -3,14 +3,14 @@ __date__= '2020/06/08'
 
 # Adapted by Stephen Roberts 2023
 
-import numpy as np
-from osgeo import gdal, osr
-from pyproj import Proj, CRS, transform
-from affine import Affine
-
 from pprint import pprint
 
 def tif2point_values(filename, zone=None, south=True, points=None, verbose=False):
+
+    import numpy as np
+    from osgeo import gdal, osr
+    from pyproj import Proj, CRS, transform
+    from affine import Affine
 
     raster= gdal.Open(filename)
     ncols= raster.RasterXSize
@@ -33,6 +33,9 @@ def tif2point_values(filename, zone=None, south=True, points=None, verbose=False
     points_utm = CRS.from_dict({'proj': 'utm', 'zone': zone, 'south': south})
     #print(points_utm)
     #points_lons, points_lats= transform(UTM, src_georeference, points[:,0], points[:,1])
+
+    #print(tif_epsg)
+    #print(south)
 
     if tif_epsg == '4326':
         # tif file is lat long projection ie 'EPSG:4326'
@@ -68,6 +71,11 @@ def tif2point_values(filename, zone=None, south=True, points=None, verbose=False
         ilocs= np.array(~ affine_transform * (points[:,0],points[:,1]))
 
     elif (tif_epsg == str(32700 + int(zone))) and south:
+        # no need for transformation
+        affine_transform= Affine.from_gdal(*raster.GetGeoTransform())
+        ilocs= np.array(~ affine_transform * (points[:,0],points[:,1]))
+
+    elif (tif_epsg == str(7800 + int(zone)))  and south:
         # no need for transformation
         affine_transform= Affine.from_gdal(*raster.GetGeoTransform())
         ilocs= np.array(~ affine_transform * (points[:,0],points[:,1]))
