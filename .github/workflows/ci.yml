@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, remove-gdal]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-no-gdal:
+    name: Test without GDAL (rasterio only)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential gfortran libopenmpi-dev
+          pip install --upgrade pip
+          pip install meson-python meson ninja Cython pybind11 numpy toml
+
+      - name: Install anuga with rasterio
+        run: |
+          pip install -e ".[io]"
+          pip install rasterio
+
+      - name: Verify no GDAL installed
+        run: |
+          python -c "import importlib; importlib.import_module('osgeo')" 2>&1 && exit 1 || echo "Confirmed: osgeo not installed"
+
+      - name: Run GeoTIFF tests
+        run: pytest anuga/file_conversion/tests/test_tif2.py -v
