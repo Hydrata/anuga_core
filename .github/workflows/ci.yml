@@ -31,7 +31,6 @@ jobs:
       - name: Install anuga with rasterio
         run: |
           pip install -e ".[io]"
-          pip install rasterio
 
       - name: Verify no GDAL installed
         run: |

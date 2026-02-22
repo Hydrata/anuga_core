@@ -45,7 +45,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-io = ["rasterio>=1.3"]
+io = ["rasterio>=1.3", "pyproj>=3.4"]
 
 [project.urls]
 homepage      = "https://en.wikipedia.org/wiki/ANUGA_Hydro"
