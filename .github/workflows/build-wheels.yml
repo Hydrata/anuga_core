@@ -101,7 +101,8 @@ jobs:
       - name: Build pymetis wheel
         shell: bash -el {0}
         run: |
-          # Build in base conda env (no GCC compilers) — CMake will find MSVC
+          # Remove Strawberry Perl from PATH — its GCC can't build metis on Windows
+          export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v Strawberry | tr '\n' ':')
           pip install build pybind11 scikit-build-core cmake ninja numpy
           pip download --no-binary :all: --no-deps pymetis -d pymetis-src
           cd pymetis-src && tar xf pymetis-*.tar.gz && cd pymetis-*/
