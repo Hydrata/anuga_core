@@ -48,9 +48,10 @@ jobs:
         shell: bash -el {0}
         run: |
           conda activate anuga_env
+          pip install pybind11 scikit-build-core cmake ninja numpy
           pip download --no-binary :all: --no-deps pymetis -d pymetis-src
           cd pymetis-src && tar xf pymetis-*.tar.gz && cd pymetis-*/
-          python -m build --wheel --outdir ../../dist-wheel
+          python -m build --wheel --no-isolation --outdir ../../dist-wheel
 
       - name: Repair wheels
         shell: bash -el {0}
@@ -101,9 +102,11 @@ jobs:
         shell: bash -el {0}
         run: |
           conda activate anuga_env
+          # Install pymetis build deps from PyPI wheels (avoids building pybind11 from source)
+          pip install pybind11 scikit-build-core cmake ninja numpy
           pip download --no-binary :all: --no-deps pymetis -d pymetis-src
           cd pymetis-src && tar xf pymetis-*.tar.gz && cd pymetis-*/
-          python -m build --wheel --outdir ../../dist-wheel
+          python -m build --wheel --no-isolation --outdir ../../dist-wheel
 
       - name: Repair wheels
         shell: bash -el {0}
