@@ -102,14 +102,16 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build pymetis wheel
-        shell: bash -el {0}
+        shell: pwsh
         run: |
-          # Force MSVC — meson otherwise finds MSYS2 GCC which can't compile metis
-          export CC=cl
-          export CXX=cl
+          # Build with MSVC — meson in bash finds MSYS2 GCC and GNU link.exe
           pip install build pybind11 scikit-build-core cmake ninja numpy
           pip download --no-binary :all: --no-deps pymetis -d pymetis-src
-          cd pymetis-src && tar xf pymetis-*.tar.gz && cd pymetis-*/
+          cd pymetis-src
+          tar xf (Get-Item pymetis-*.tar.gz).Name
+          cd (Get-Item pymetis-*/ -Directory).Name
+          $env:CC = "cl"
+          $env:CXX = "cl"
           python -m build --wheel --no-isolation --outdir ../../dist-wheel
 
       - name: Repair wheels
