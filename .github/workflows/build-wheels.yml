@@ -1,0 +1,149 @@
+name: Build Wheels
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to use for the release (leave empty for no release)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux wheel (Python 3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          use-mamba: true
+          python-version: '3.12'
+          auto-update-conda: true
+
+      - name: Create build environment
+        shell: bash -el {0}
+        run: |
+          conda create -n anuga_env -c conda-forge python=3.12
+
+      - name: Install compilers
+        shell: bash -el {0}
+        run: |
+          conda install -c conda-forge -n anuga_env compilers
+
+      - name: Build wheel
+        shell: bash -el {0}
+        run: |
+          conda activate anuga_env
+          python -m pip install build
+          python -m build --wheel --outdir dist-wheel
+
+      - name: Repair wheel
+        shell: bash -el {0}
+        run: |
+          conda activate anuga_env
+          python -m pip install repairwheel
+          repairwheel -o dist dist-wheel/*.whl
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: wheel-linux
+          path: dist/*.whl
+
+  build-windows:
+    name: Build Windows wheel (Python 3.12)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          use-mamba: true
+          python-version: '3.12'
+          auto-update-conda: true
+
+      - name: Create build environment
+        shell: bash -el {0}
+        run: |
+          conda create -n anuga_env -c conda-forge python=3.12
+
+      - name: Install gcc compilers
+        shell: bash -el {0}
+        run: |
+          conda install -c conda-forge -n anuga_env libpython gcc_win-64 gxx_win-64
+
+      - name: Build wheel
+        shell: bash -el {0}
+        run: |
+          conda activate anuga_env
+          python -m pip install build
+          python -m build --wheel --outdir dist-wheel
+
+      - name: Repair wheel
+        shell: bash -el {0}
+        run: |
+          conda activate anuga_env
+          python -m pip install repairwheel
+          repairwheel -o dist dist-wheel/*.whl
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: wheel-windows
+          path: dist/*.whl
+
+  release:
+    name: Create GitHub Release with wheels
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    # Only create a release on tag push, or workflow_dispatch with a tag specified
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download Linux wheel
+        uses: actions/download-artifact@v7
+        with:
+          name: wheel-linux
+          path: wheels/
+
+      - name: Download Windows wheel
+        uses: actions/download-artifact@v7
+        with:
+          name: wheel-windows
+          path: wheels/
+
+      - name: List wheels
+        run: ls -la wheels/
+
+      - name: Determine tag name
+        id: tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: ${{ steps.tag.outputs.name }}
+          body: |
+            Pre-built anuga wheels for Python 3.12.
+
+            These wheels are used by [run_anuga](https://github.com/Hydrata/run_anuga) to build platform-specific executables without needing to compile anuga from source.
+
+            ## Wheels
+            - Linux: `manylinux` wheel (x86_64)
+            - Windows: `win_amd64` wheel
+          files: wheels/*.whl
