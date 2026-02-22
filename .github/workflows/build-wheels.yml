@@ -41,6 +41,10 @@ jobs:
         shell: bash -el {0}
         run: |
           conda activate anuga_env
+          # Target baseline x86-64 to avoid SIGILL on machines without AVX/AVX2
+          export CFLAGS="-march=x86-64 -mtune=generic"
+          export CXXFLAGS="-march=x86-64 -mtune=generic"
+          export FFLAGS="-march=x86-64 -mtune=generic"
           python -m pip install build
           python -m build --wheel --outdir dist-wheel
 
@@ -84,6 +88,10 @@ jobs:
         shell: bash -el {0}
         run: |
           conda activate anuga_env
+          # Target baseline x86-64 to avoid SIGILL on machines without AVX/AVX2
+          export CFLAGS="-march=x86-64 -mtune=generic"
+          export CXXFLAGS="-march=x86-64 -mtune=generic"
+          export FFLAGS="-march=x86-64 -mtune=generic"
           python -m pip install build
           python -m build --wheel --outdir dist-wheel
 
