@@ -31,7 +31,7 @@ jobs:
       - name: Install anuga with rasterio
         run: |
           pip install --no-build-isolation -e ".[io]"
-          pip install pytest
+          pip install pytest six
 
       - name: Verify no GDAL installed
         run: |
