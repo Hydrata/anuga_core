@@ -101,9 +101,8 @@ jobs:
       - name: Build pymetis wheel
         shell: bash -el {0}
         run: |
-          conda activate anuga_env
-          # Install pymetis build deps from PyPI wheels (avoids building pybind11 from source)
-          pip install pybind11 scikit-build-core cmake ninja numpy
+          # Build in base conda env (no GCC compilers) — CMake will find MSVC
+          pip install build pybind11 scikit-build-core cmake ninja numpy
           pip download --no-binary :all: --no-deps pymetis -d pymetis-src
           cd pymetis-src && tar xf pymetis-*.tar.gz && cd pymetis-*/
           python -m build --wheel --no-isolation --outdir ../../dist-wheel
