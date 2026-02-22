@@ -43,12 +43,15 @@ except:
     from . import config as config
 
 
-from pymetis import part_graph
+try:
+    from pymetis import part_graph
+except ImportError:
+    part_graph = None
 
 try:
     from pymetis import part_mesh
     metis_version = "5_part_mesh"
-except:
+except ImportError:
     metis_version = "5_part_graph"
 
 verbose = False
@@ -200,6 +203,9 @@ def pmesh_divide_metis_helper(domain, n_procs):
                 if neigh[i][0] < 0:
                     del neigh[i][0]
 
+            if part_graph is None:
+                raise ImportError("pymetis is required for parallel mesh distribution. "
+                                  "Install it with: pip install pymetis")
             cutcount, partvert = part_graph(n_procs, neigh)
 
             epart = partvert

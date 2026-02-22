@@ -37,32 +37,21 @@ jobs:
         run: |
           conda install -c conda-forge -n anuga_env compilers
 
-      - name: Build anuga wheel
+      - name: Build wheel
         shell: bash -el {0}
         run: |
           conda activate anuga_env
           python -m pip install build
           python -m build --wheel --outdir dist-wheel
 
-      - name: Build pymetis wheel
-        shell: bash -el {0}
-        run: |
-          conda activate anuga_env
-          pip install pybind11 scikit-build-core cmake ninja numpy
-          pip download --no-binary :all: --no-deps pymetis -d pymetis-src
-          cd pymetis-src && tar xf pymetis-*.tar.gz && cd pymetis-*/
-          python -m build --wheel --no-isolation --outdir ../../dist-wheel
-
-      - name: Repair wheels
+      - name: Repair wheel
         shell: bash -el {0}
         run: |
           conda activate anuga_env
           python -m pip install repairwheel
-          for whl in dist-wheel/*.whl; do
-            repairwheel -o dist "$whl"
-          done
+          repairwheel -o dist dist-wheel/*.whl
 
-      - name: Upload wheel artifacts
+      - name: Upload wheel artifact
         uses: actions/upload-artifact@v6
         with:
           name: wheel-linux
@@ -91,39 +80,21 @@ jobs:
         run: |
           conda install -c conda-forge -n anuga_env libpython gcc_win-64 gxx_win-64
 
-      - name: Build anuga wheel
+      - name: Build wheel
         shell: bash -el {0}
         run: |
           conda activate anuga_env
           python -m pip install build
           python -m build --wheel --outdir dist-wheel
 
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Build pymetis wheel
-        shell: pwsh
-        run: |
-          # Build with MSVC — meson in bash finds MSYS2 GCC and GNU link.exe
-          pip install build pybind11 scikit-build-core cmake ninja numpy
-          pip download --no-binary :all: --no-deps pymetis -d pymetis-src
-          cd pymetis-src
-          tar xf (Get-Item pymetis-*.tar.gz).Name
-          cd (Get-Item pymetis-*/ -Directory).Name
-          $env:CC = "cl"
-          $env:CXX = "cl"
-          python -m build --wheel --no-isolation --outdir ../../dist-wheel
-
-      - name: Repair wheels
+      - name: Repair wheel
         shell: bash -el {0}
         run: |
           conda activate anuga_env
           python -m pip install repairwheel
-          for whl in dist-wheel/*.whl; do
-            repairwheel -o dist "$whl"
-          done
+          repairwheel -o dist dist-wheel/*.whl
 
-      - name: Upload wheel artifacts
+      - name: Upload wheel artifact
         uses: actions/upload-artifact@v6
         with:
           name: wheel-windows
