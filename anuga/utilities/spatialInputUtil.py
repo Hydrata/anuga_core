@@ -62,6 +62,12 @@ try:
 except ImportError as err:
     gdal_available = False
 
+try:
+    import rasterio as _rasterio
+    _rasterio_available = True
+except ImportError:
+    _rasterio_available = False
+
 
 #####################################  
 if gdal_available:
@@ -1328,88 +1334,171 @@ if gdal_available:
     ###################
 
 else: # gdal_available == False
-    msg='Failed to import gdal/ogr modules --'\
-        + 'perhaps gdal python interface is not installed.'
-
+    _ogr_msg = 'Failed to import gdal/ogr modules -- '\
+        'perhaps gdal python interface is not installed. '\
+        'Vector/shapefile operations require osgeo (GDAL). '\
+        'Raster operations can use rasterio instead.'
 
 
     def readShp_1PolyGeo(shapefile, dropLast=True):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def readShp_1LineGeo(shapefile):
-        raise ImportError(msg)
+        raise ImportError(_ogr_msg)
 
     def read_csv_optional_header(filename):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def read_polygon(filename):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def readShpPtsAndAttributes(shapefile):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def read_points(filename):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def ListPts2Wkb( ptsIn, geometry_type='line', appendFirstOnEnd=None):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def Wkb2ListPts(wkb_geo, removeLast=False, drop_third_dimension=False):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def compute_squared_distance_to_segment(pt, line):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def find_nearest_segment(pt, segments):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def shift_point_on_line(pt, lineIn, nearest_segment_index):
-        raise ImportError(msg)
-    
-    def insert_intersection_point(intersectionPt, line_pts, 
+        raise ImportError(_ogr_msg)
+
+    def insert_intersection_point(intersectionPt, line_pts,
                                   point_movement_threshold,verbose=False):
-        raise ImportError(msg)
+        raise ImportError(_ogr_msg)
 
     def check_polygon_is_small(intersection, buf, tol2=100.):
-        raise ImportError(msg)
-    
-    def addIntersectionPtsToLines(L1,L2, point_movement_threshold=0.0, 
+        raise ImportError(_ogr_msg)
+
+    def addIntersectionPtsToLines(L1,L2, point_movement_threshold=0.0,
                                   buf=1.0e-06, tol2 = 100,
                                   verbose=True, nameFlag=''):
-        raise ImportError(msg)
-   
-    def getRasterExtent(rasterFile, asPolygon=False): 
-        raise ImportError(msg)
+        raise ImportError(_ogr_msg)
 
-    def rasterValuesAtPoints(xy, rasterFile, band=1):
-        raise ImportError(msg)
-    
-    
+    # --- Raster functions: use rasterio if available, else raise ImportError ---
+
+    if _rasterio_available:
+        def getRasterExtent(rasterFile, asPolygon=False):
+            """
+                Get the extent of a raster using rasterio (fallback when GDAL unavailable).
+            """
+            with _rasterio.open(rasterFile) as raster:
+                transform = raster.transform
+                xOrigin = transform.c
+                yOrigin = transform.f
+                xPixels = raster.width
+                yPixels = raster.height
+
+                # Compute the other extreme corner
+                x2 = xOrigin + xPixels * transform.a + yPixels * transform.b
+                y2 = yOrigin + xPixels * transform.d + yPixels * transform.e
+
+                xmin = min(xOrigin, x2)
+                xmax = max(xOrigin, x2)
+                ymin = min(yOrigin, y2)
+                ymax = max(yOrigin, y2)
+
+            if asPolygon:
+                return [ [xmin,ymin], [xmax,ymin], [xmax,ymax], [xmin,ymax]]
+            else:
+                return [xmin, xmax, ymin, ymax]
+
+        def rasterValuesAtPoints(
+            xy,
+            rasterFile,
+            band=1,
+            nodata_rel_tol = 1.0e-08,
+            interpolation = 'pixel'):
+            """
+                Get raster values at point locations using rasterio (fallback when GDAL unavailable).
+                Only 'pixel' interpolation is supported in this fallback; 'bilinear' requires GDAL.
+            """
+            with _rasterio.open(rasterFile) as raster:
+                rasterData = raster.read(band)
+                nodataval = raster.nodata
+                transform = raster.transform
+                xOrigin = transform.c
+                yOrigin = transform.f
+                pixelWidth = transform.a
+                pixelHeight = transform.e  # Negative
+
+                xMax = raster.width
+                yMax = raster.height
+
+            # Get coordinates in pixel values
+            px = (xy[:,0] - xOrigin) / pixelWidth
+            py = (xy[:,1] - yOrigin) / pixelHeight
+
+            if not (px.max() < xMax and px.min() >= 0 and py.max() < yMax and py.min() >= 0):
+                msg = 'Trying to extract point values that exceed the raster extent'
+                raise Exception(msg)
+
+            if interpolation == 'pixel':
+                xC = numpy.floor(px).astype(int)
+                yC = numpy.floor(py).astype(int)
+                elev = rasterData[yC, xC].astype(float)
+            elif interpolation == 'bilinear':
+                raise NotImplementedError(
+                    'Bilinear interpolation requires GDAL. '
+                    'Install osgeo or use interpolation="pixel".')
+            else:
+                raise ValueError(f'Unknown interpolation: {interpolation}')
+
+            # Handle nodata
+            if nodataval is not None:
+                nodata_mask = (numpy.abs(elev - nodataval) < nodata_rel_tol * abs(nodataval))
+                elev[nodata_mask] = numpy.nan
+
+            return elev
+
+    else:
+        def getRasterExtent(rasterFile, asPolygon=False):
+            raise ImportError(
+                'Neither osgeo (GDAL) nor rasterio is installed. '
+                'Install rasterio: pip install rasterio')
+
+        def rasterValuesAtPoints(xy, rasterFile, band=1,
+                                 nodata_rel_tol=1.0e-08, interpolation='pixel'):
+            raise ImportError(
+                'Neither osgeo (GDAL) nor rasterio is installed. '
+                'Install rasterio: pip install rasterio')
+
+
     def gridPointsInPolygon(polygon, approx_grid_spacing=[1.,1.], eps=1.0e-06):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
 
     def matchInds(pattern, stringList):
-        raise ImportError(msg)
-    
-    
+        raise ImportError(_ogr_msg)
+
+
     def add_intersections_to_domain_features(bounding_polygonIn,
                 breakLinesIn={ }, riverWallsIn={ }, point_movement_threshold=0.,
                 verbose=True):
-        raise ImportError(msg)
-    
-    
+        raise ImportError(_ogr_msg)
+
+
     def readRegionPtAreas(shapefile, convert_length_to_area=False):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def readListOfBreakLines(shapefileList):
-        raise ImportError(msg)
+        raise ImportError(_ogr_msg)
 
     def combine_breakLines_and_riverwalls_for_mesh(breakLines, riverWalls):
-        raise ImportError(msg)
-    
+        raise ImportError(_ogr_msg)
+
     def polygon_from_matching_breaklines(pattern,breakLinesIn, reverse2nd=None):
-        raise ImportError(msg)
+        raise ImportError(_ogr_msg)
     ###################    
 
 
