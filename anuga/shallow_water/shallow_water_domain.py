@@ -382,6 +382,11 @@ class Domain(Generic_Domain):
         self.riverwallData=anuga.structures.riverwall.RiverWall(self)
         self.create_riverwalls = self.riverwallData.create_riverwalls
 
+        # Sub-grid terrain sampling -- initialise as disabled
+        from anuga.subgrid.operators import SubGridData
+        self.subgridData = SubGridData(self)
+        self.use_subgrid = False
+
         ## Keep track of the fluxes through the boundaries
         ## Only works for DE algorithms at present
         max_time_substeps=3 # Maximum number of substeps supported by any timestepping method
@@ -1268,6 +1273,8 @@ class Domain(Generic_Domain):
            DE2
            DE0_7
            DE1_7
+           DE0_SG  (DE0 with sub-grid terrain)
+           DE1_SG  (DE1 with sub-grid terrain)
         """
 
         algorithm = str(algorithm)
@@ -1277,7 +1284,8 @@ class Domain(Generic_Domain):
 
 
         flow_algorithms = ['DE0', 'DE1', 'DE2', \
-                           'DE0_7', 'DE1_7']
+                           'DE0_7', 'DE1_7',
+                           'DE0_SG', 'DE1_SG']
 
         if algorithm in flow_algorithms:
             self.flow_algorithm = algorithm
@@ -1300,6 +1308,14 @@ class Domain(Generic_Domain):
 
         if self.flow_algorithm == 'DE1_7':
             self._set_DE1_7_defaults()
+
+        if self.flow_algorithm == 'DE0_SG':
+            self._set_DE0_defaults()
+            self.use_subgrid = True
+
+        if self.flow_algorithm == 'DE1_SG':
+            self._set_DE1_defaults()
+            self.use_subgrid = True
 
 
     def get_flow_algorithm(self):
@@ -1359,6 +1375,84 @@ class Domain(Generic_Domain):
         assert low_froude in [0,1,2]
 
         self.low_froude = low_froude
+
+    def set_subgrid_dem(self, dem_file, sampling_resolution=2.0,
+                       n_breakpoints=20, cache=True, build_edge_tables=False,
+                       verbose=False):
+        """Enable sub-grid terrain sampling from a high-resolution DEM.
+
+        Pre-computes volume-elevation lookup tables for each mesh cell
+        by sampling the DEM at fine resolution within each triangle.
+        Optionally builds edge cross-section tables.
+
+        Parameters
+        ----------
+        dem_file : str
+            Path to a GDAL-compatible raster DEM file.
+        sampling_resolution : float
+            Approximate spacing of sample points within each triangle
+            (in the same units as the mesh, typically metres). Default 2.0.
+        n_breakpoints : int
+            Number of elevation breakpoints per cell. Default 20.
+        cache : bool
+            If True, cache tables to disk and reload on subsequent runs
+            with the same mesh+DEM+parameters. Default True.
+        build_edge_tables : bool
+            If True, also build edge cross-section tables (stretch goal).
+            Default False.
+        verbose : bool
+            Print progress. Default False.
+        """
+        import os
+        from anuga.subgrid.dem_sampler import sample_dem_for_cells, sample_dem_for_edges
+        from anuga.subgrid.subgrid_io import (save_subgrid_tables,
+                                              load_subgrid_tables,
+                                              get_cache_filepath)
+
+        cell_table = None
+        edge_table = None
+
+        if cache:
+            cache_path = get_cache_filepath(
+                self, dem_file, sampling_resolution, n_breakpoints
+            )
+            cache_file = cache_path + '.npz'
+            if os.path.isfile(cache_file):
+                if verbose:
+                    print(f"Loading sub-grid tables from cache: {cache_file}")
+                cell_table, edge_table = load_subgrid_tables(cache_path)
+
+        if cell_table is None:
+            if verbose:
+                print("Building sub-grid cell volume tables...")
+            cell_table = sample_dem_for_cells(
+                self, dem_file,
+                sampling_resolution=sampling_resolution,
+                n_breakpoints=n_breakpoints,
+                verbose=verbose
+            )
+
+            if build_edge_tables:
+                if verbose:
+                    print("Building sub-grid edge area tables...")
+                edge_table = sample_dem_for_edges(
+                    self, dem_file,
+                    sampling_resolution=sampling_resolution,
+                    n_breakpoints=n_breakpoints,
+                    verbose=verbose
+                )
+
+            if cache:
+                if verbose:
+                    print(f"Caching sub-grid tables to: {cache_file}")
+                save_subgrid_tables(cache_path, cell_table, edge_table)
+
+        # Attach to domain
+        self.subgridData.set_tables(cell_table, edge_table)
+        self.use_subgrid = True
+
+        if verbose:
+            print("Sub-grid terrain sampling enabled.")
 
     def set_use_optimise_dry_cells(self, flag=True):
         """ Try to optimize calculations where region is dry
@@ -2244,7 +2338,22 @@ class Domain(Generic_Domain):
         v_B   = V.boundary_values
         h_B   = H.boundary_values
 
-        h_C[:] = w_C-z_C
+        if self.use_subgrid and self.subgridData.enabled:
+            # Sub-grid: effective depth = V / A_w
+            sg = self.subgridData
+            table = sg.cell_table
+            for k in range(self.number_of_elements):
+                eta = w_C[k]
+                V = table.volume_from_stage(eta, k)
+                A_w = table.wet_area_from_stage(eta, k)
+                if A_w > 1.0e-12:
+                    h_C[k] = V / A_w
+                else:
+                    h_C[k] = 0.0
+                sg.volume_centroid[k] = V
+                sg.wet_area_centroid[k] = A_w
+        else:
+            h_C[:] = w_C-z_C
         h_C[:] = num.where(h_C >= 0, h_C , 0.0)
 
         h_B[:] = w_B-z_B

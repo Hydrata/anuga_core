@@ -245,6 +245,15 @@ from anuga.operators.erosion_operators import Flat_slice_erosion_operator
 from anuga.operators.erosion_operators import Flat_fill_slice_erosion_operator
 
 # ---------------------------
+# Sub-grid terrain sampling
+# ---------------------------
+from anuga.subgrid import (CellVolumeTable, EdgeAreaTable,
+                           sample_dem_for_cells, sample_dem_for_edges,
+                           save_subgrid_tables, load_subgrid_tables,
+                           SubGridData, SubGridCorrectionOperator,
+                           SubGridVolumeCorrector)
+
+# ---------------------------
 # Structure Operators
 # ---------------------------
 

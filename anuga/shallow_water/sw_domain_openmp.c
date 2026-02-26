@@ -24,6 +24,7 @@
 #include "sw_domain_math.h"
 #include "util_ext.h"
 #include "sw_domain.h"
+#include "sw_subgrid.h"
 #include "anuga_constants.h"
 
 // FIXME: Perhaps use the epsilon used elsewhere.
@@ -627,15 +628,24 @@ double _openmp_protect(const struct domain *__restrict D)
   for (anuga_int k = 0; k < number_of_elements; k++)
   {
     anuga_int k3 = 3 * k;
-    double hc = D->stage_centroid_values[k] - D->bed_centroid_values[k];
+
+    // When sub-grid is enabled, use z_min from the DEM instead of
+    // the interpolated bed centroid (which averages away terrain)
+    double bmin;
+    if (D->use_subgrid && D->sg_cell_z_min != NULL) {
+      bmin = D->sg_cell_z_min[k];
+    } else {
+      bmin = D->bed_centroid_values[k];
+    }
+
+    double hc = D->stage_centroid_values[k] - bmin;
     if (hc < minimum_allowed_height * 1.0)
     {
       // Set momentum to zero and ensure h is non negative
       D->xmom_centroid_values[k] = 0.;
-      D->xmom_centroid_values[k] = 0.;
+      D->ymom_centroid_values[k] = 0.;
       if (hc <= 0.0)
       {
-        double bmin = D->bed_centroid_values[k];
         // Minimum allowed stage = bmin
 
         // WARNING: ADDING MASS if wc[k]<bmin
@@ -653,6 +663,12 @@ double _openmp_protect(const struct domain *__restrict D)
           D->stage_vertex_values[k3] = bmin;     // min(bmin, wc[k]); //zv[3*k]-minimum_allowed_height);
           D->stage_vertex_values[k3 + 1] = bmin; // min(bmin, wc[k]); //zv[3*k+1]-minimum_allowed_height);
           D->stage_vertex_values[k3 + 2] = bmin; // min(bmin, wc[k]); //zv[3*k+2]-minimum_allowed_height);
+        }
+
+        // Update sub-grid state when dry
+        if (D->use_subgrid && D->sg_volume_centroid != NULL) {
+          D->sg_volume_centroid[k] = 0.0;
+          D->sg_wet_area_centroid[k] = 0.0;
         }
       }
     }
@@ -1563,12 +1579,25 @@ anuga_int _openmp_fix_negative_cells(const struct domain *__restrict D)
 #pragma omp parallel for schedule(static) reduction(+ : num_negative_cells)
   for (anuga_int k = 0; k < D->number_of_elements; k++)
   {
-    if ((D->stage_centroid_values[k] - D->bed_centroid_values[k] < 0.0) & (D->tri_full_flag[k] > 0))
+    // When sub-grid is enabled, use z_min as the minimum stage
+    double bed_ref;
+    if (D->use_subgrid && D->sg_cell_z_min != NULL) {
+      bed_ref = D->sg_cell_z_min[k];
+    } else {
+      bed_ref = D->bed_centroid_values[k];
+    }
+
+    if ((D->stage_centroid_values[k] - bed_ref < 0.0) & (D->tri_full_flag[k] > 0))
     {
       num_negative_cells = num_negative_cells + 1;
-      D->stage_centroid_values[k] = D->bed_centroid_values[k];
+      D->stage_centroid_values[k] = bed_ref;
       D->xmom_centroid_values[k] = 0.0;
       D->ymom_centroid_values[k] = 0.0;
+
+      if (D->use_subgrid && D->sg_volume_centroid != NULL) {
+        D->sg_volume_centroid[k] = 0.0;
+        D->sg_wet_area_centroid[k] = 0.0;
+      }
     }
   }
   return num_negative_cells;
@@ -2373,6 +2402,42 @@ anuga_int _openmp_update_conserved_quantities(const struct domain *__restrict D,
 		D->stage_semi_implicit_update[k] = 0.0;
     D->xmom_semi_implicit_update[k] = 0.0;
     D->ymom_semi_implicit_update[k] = 0.0;
+
+		// Sub-grid volume correction
+		// When sub-grid is enabled, the standard flat-bed stage update
+		// is reinterpreted in volume-space using the pre-computed V(eta) tables.
+		if (D->use_subgrid && D->sg_cell_eta != NULL) {
+			double stage_old = stage_c; // pre-update stage (saved above)
+			double stage_new = D->stage_centroid_values[k]; // post-update stage
+
+			// Volume change intended by the flat-bed update
+			double dV = (stage_new - stage_old) * D->areas[k];
+
+			// Old volume from sub-grid table
+			double V_old = sg_volume_from_stage(
+				D->sg_cell_eta, D->sg_cell_volume,
+				D->sg_cell_table_offset, D->sg_cell_n_levels,
+				D->sg_cell_area, k, stage_old);
+
+			// New volume
+			double V_new = V_old + dV;
+			if (V_new < 0.0) V_new = 0.0;
+
+			// Invert to get corrected stage
+			double stage_corrected = sg_stage_from_volume(
+				D->sg_cell_eta, D->sg_cell_volume,
+				D->sg_cell_table_offset, D->sg_cell_n_levels,
+				D->sg_cell_area, k, V_new);
+
+			D->stage_centroid_values[k] = stage_corrected;
+
+			// Update runtime sub-grid state
+			D->sg_volume_centroid[k] = V_new;
+			D->sg_wet_area_centroid[k] = sg_wet_area_from_stage(
+				D->sg_cell_eta, D->sg_cell_wet_area,
+				D->sg_cell_table_offset, D->sg_cell_n_levels,
+				D->sg_cell_area, k, stage_corrected);
+		}
 	}
 
 	return 0;
@@ -2395,22 +2460,61 @@ anuga_int _openmp_saxpy_conserved_quantities(const struct domain *__restrict D,
   // double bc_a = b *c /a;
   double c_inv = 1.0 / c;
 
-  #pragma omp parallel for simd schedule(static)
-  for (anuga_int i = 0; i < N; i++)
-  {
-    D->stage_centroid_values[i] = a*D->stage_centroid_values[i] + b*D->stage_backup_values[i];
-    D->xmom_centroid_values[i]  = a*D->xmom_centroid_values[i] + b*D->xmom_backup_values[i];
-    D->ymom_centroid_values[i]  = a*D->ymom_centroid_values[i] + b*D->ymom_backup_values[i];
-  }
+  if (D->use_subgrid && D->sg_cell_eta != NULL) {
+    // Sub-grid path: blend stages in volume-space
+    // V_blended = (a * V_current + b * V_backup) / c
+    // Then invert: stage = V^{-1}(V_blended)
+    #pragma omp parallel for schedule(static)
+    for (anuga_int i = 0; i < N; i++)
+    {
+      double V_current = sg_volume_from_stage(
+        D->sg_cell_eta, D->sg_cell_volume,
+        D->sg_cell_table_offset, D->sg_cell_n_levels,
+        D->sg_cell_area, i, D->stage_centroid_values[i]);
 
-  if (c != 1.0)
-  {
+      double V_backup = sg_volume_from_stage(
+        D->sg_cell_eta, D->sg_cell_volume,
+        D->sg_cell_table_offset, D->sg_cell_n_levels,
+        D->sg_cell_area, i, D->stage_backup_values[i]);
+
+      double V_blended = (a * V_current + b * V_backup) * c_inv;
+      if (V_blended < 0.0) V_blended = 0.0;
+
+      D->stage_centroid_values[i] = sg_stage_from_volume(
+        D->sg_cell_eta, D->sg_cell_volume,
+        D->sg_cell_table_offset, D->sg_cell_n_levels,
+        D->sg_cell_area, i, V_blended);
+
+      // Momentum blending stays in stage/momentum space
+      D->xmom_centroid_values[i] = (a*D->xmom_centroid_values[i] + b*D->xmom_backup_values[i]) * c_inv;
+      D->ymom_centroid_values[i] = (a*D->ymom_centroid_values[i] + b*D->ymom_backup_values[i]) * c_inv;
+
+      // Update sub-grid state
+      D->sg_volume_centroid[i] = V_blended;
+      D->sg_wet_area_centroid[i] = sg_wet_area_from_stage(
+        D->sg_cell_eta, D->sg_cell_wet_area,
+        D->sg_cell_table_offset, D->sg_cell_n_levels,
+        D->sg_cell_area, i, D->stage_centroid_values[i]);
+    }
+  } else {
+    // Standard path (no sub-grid)
     #pragma omp parallel for simd schedule(static)
     for (anuga_int i = 0; i < N; i++)
     {
-      D->stage_centroid_values[i] *= c_inv;
-      D->xmom_centroid_values[i]  *= c_inv;
-      D->ymom_centroid_values[i]  *= c_inv;
+      D->stage_centroid_values[i] = a*D->stage_centroid_values[i] + b*D->stage_backup_values[i];
+      D->xmom_centroid_values[i]  = a*D->xmom_centroid_values[i] + b*D->xmom_backup_values[i];
+      D->ymom_centroid_values[i]  = a*D->ymom_centroid_values[i] + b*D->ymom_backup_values[i];
+    }
+
+    if (c != 1.0)
+    {
+      #pragma omp parallel for simd schedule(static)
+      for (anuga_int i = 0; i < N; i++)
+      {
+        D->stage_centroid_values[i] *= c_inv;
+        D->xmom_centroid_values[i]  *= c_inv;
+        D->ymom_centroid_values[i]  *= c_inv;
+      }
     }
   }
 
@@ -2421,7 +2525,7 @@ anuga_int _openmp_saxpy_conserved_quantities(const struct domain *__restrict D,
   // if (c != 1.0) {
   //   anuga_dscal(N, c_inv, D->stage_centroid_values, 1);
   // }
-  
+
   // // xmom
   // anuga_dscal(N, a, D->xmom_centroid_values, 1);
   // anuga_daxpy(N, b, D->xmom_backup_values, 1, D->xmom_centroid_values, 1);

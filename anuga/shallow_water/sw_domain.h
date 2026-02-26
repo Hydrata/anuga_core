@@ -123,6 +123,29 @@ struct domain {
     double* xmom_backup_values;
     double* ymom_backup_values;
 
+    // Sub-grid terrain sampling
+    anuga_int use_subgrid;
+
+    // Per-cell sub-grid tables (packed flat arrays with per-cell offsets)
+    double* sg_cell_eta;         // elevation breakpoints [total_breaks]
+    double* sg_cell_volume;      // cumulative volume [total_breaks]
+    double* sg_cell_wet_area;    // wet planform area [total_breaks]
+    int*    sg_cell_table_offset; // offset into flat arrays per cell [N]
+    int*    sg_cell_n_levels;    // number of breakpoints per cell [N]
+    double* sg_cell_area;        // cell area for extrapolation [N]
+    double* sg_cell_z_min;       // min DEM elevation per cell [N]
+
+    // Per-edge sub-grid tables (stretch goal, packed flat arrays)
+    double* sg_edge_eta;         // elevation breakpoints [total_edge_breaks]
+    double* sg_edge_flow_area;   // cross-sectional flow area [total_edge_breaks]
+    double* sg_edge_flow_width;  // flow width [total_edge_breaks]
+    int*    sg_edge_table_offset; // offset per edge [3*N]
+    int*    sg_edge_n_levels;    // breakpoints per edge [3*N]
+
+    // Runtime sub-grid state
+    double* sg_volume_centroid;  // current volume per cell [N]
+    double* sg_wet_area_centroid; // current wet area per cell [N]
+
 };
 
 

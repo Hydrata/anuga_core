@@ -100,6 +100,23 @@ cdef extern from "sw_domain_openmp.c" nogil:
 		double* xmom_backup_values
 		double* ymom_backup_values
 
+		# Sub-grid terrain sampling
+		int64_t use_subgrid
+		double* sg_cell_eta
+		double* sg_cell_volume
+		double* sg_cell_wet_area
+		int*    sg_cell_table_offset
+		int*    sg_cell_n_levels
+		double* sg_cell_area
+		double* sg_cell_z_min
+		double* sg_edge_eta
+		double* sg_edge_flow_area
+		double* sg_edge_flow_width
+		int*    sg_edge_table_offset
+		int*    sg_edge_n_levels
+		double* sg_volume_centroid
+		double* sg_wet_area_centroid
+
 
 
 	struct edge:
@@ -160,7 +177,10 @@ cdef inline get_python_domain_parameters(domain *D, object domain_object):
 	D.beta_vh = domain_object.beta_vh
 	D.beta_vh_dry = domain_object.beta_vh_dry
 	D.max_flux_update_frequency = domain_object.max_flux_update_frequency
-		
+
+	# Sub-grid parameters
+	D.use_subgrid = getattr(domain_object, 'use_subgrid', 0)
+
 
 cdef inline get_python_domain_pointers(domain *D, object domain_object):
 
@@ -449,7 +469,113 @@ cdef inline get_python_domain_pointers(domain *D, object domain_object):
 
 	D.ncol_riverwall_hydraulic_properties = riverwallData.ncol_hydraulic_properties
 
+	#------------------------------------------------------
+	# Sub-grid terrain sampling structures
+	#------------------------------------------------------
+	cdef double[::1] sg_cell_eta
+	cdef double[::1] sg_cell_volume
+	cdef double[::1] sg_cell_wet_area
+	cdef int[::1]    sg_cell_table_offset
+	cdef int[::1]    sg_cell_n_levels
+	cdef double[::1] sg_cell_area
+	cdef double[::1] sg_cell_z_min
+	cdef double[::1] sg_volume_centroid
+	cdef double[::1] sg_wet_area_centroid
 
+	if D.use_subgrid and hasattr(domain_object, 'subgridData') and domain_object.subgridData.enabled:
+		sgData = domain_object.subgridData
+		ct = sgData.cell_table
+
+		# Flatten the 2D tables to 1D packed arrays with offsets
+		# These are computed once and cached on the sgData object
+		if not hasattr(sgData, '_flat_eta'):
+			_pack_subgrid_tables(sgData)
+
+		sg_cell_eta = sgData._flat_eta
+		D.sg_cell_eta = &sg_cell_eta[0]
+
+		sg_cell_volume = sgData._flat_vol
+		D.sg_cell_volume = &sg_cell_volume[0]
+
+		sg_cell_wet_area = sgData._flat_area
+		D.sg_cell_wet_area = &sg_cell_wet_area[0]
+
+		sg_cell_table_offset = sgData._flat_offset
+		D.sg_cell_table_offset = &sg_cell_table_offset[0]
+
+		sg_cell_n_levels = sgData._flat_n_levels
+		D.sg_cell_n_levels = &sg_cell_n_levels[0]
+
+		sg_cell_area = sgData._flat_cell_area
+		D.sg_cell_area = &sg_cell_area[0]
+
+		sg_cell_z_min = sgData._flat_z_min
+		D.sg_cell_z_min = &sg_cell_z_min[0]
+
+		sg_volume_centroid = sgData.volume_centroid
+		D.sg_volume_centroid = &sg_volume_centroid[0]
+
+		sg_wet_area_centroid = sgData.wet_area_centroid
+		D.sg_wet_area_centroid = &sg_wet_area_centroid[0]
+
+		# Edge tables (stretch goal) - set to NULL for now
+		D.sg_edge_eta = NULL
+		D.sg_edge_flow_area = NULL
+		D.sg_edge_flow_width = NULL
+		D.sg_edge_table_offset = NULL
+		D.sg_edge_n_levels = NULL
+	else:
+		D.sg_cell_eta = NULL
+		D.sg_cell_volume = NULL
+		D.sg_cell_wet_area = NULL
+		D.sg_cell_table_offset = NULL
+		D.sg_cell_n_levels = NULL
+		D.sg_cell_area = NULL
+		D.sg_cell_z_min = NULL
+		D.sg_volume_centroid = NULL
+		D.sg_wet_area_centroid = NULL
+		D.sg_edge_eta = NULL
+		D.sg_edge_flow_area = NULL
+		D.sg_edge_flow_width = NULL
+		D.sg_edge_table_offset = NULL
+		D.sg_edge_n_levels = NULL
+
+
+def _pack_subgrid_tables(sgData):
+	"""Pack 2D sub-grid tables into flat 1D arrays with per-cell offsets.
+
+	This is called once and cached on sgData for efficient C access.
+	"""
+	ct = sgData.cell_table
+	n_cells = ct.n_cells
+
+	# Compute offsets and total size
+	offsets = np.zeros(n_cells, dtype=np.intc)
+	total = 0
+	for k in range(n_cells):
+		offsets[k] = total
+		total += ct.n_breaks[k]
+
+	# Pack into flat arrays
+	flat_eta = np.zeros(max(total, 1), dtype=np.float64)
+	flat_vol = np.zeros(max(total, 1), dtype=np.float64)
+	flat_area = np.zeros(max(total, 1), dtype=np.float64)
+
+	for k in range(n_cells):
+		n = ct.n_breaks[k]
+		if n > 0:
+			off = offsets[k]
+			flat_eta[off:off+n] = ct.eta_breaks[k, :n]
+			flat_vol[off:off+n] = ct.vol_cumul[k, :n]
+			flat_area[off:off+n] = ct.wet_area[k, :n]
+
+	sgData._flat_eta = np.ascontiguousarray(flat_eta)
+	sgData._flat_vol = np.ascontiguousarray(flat_vol)
+	sgData._flat_area = np.ascontiguousarray(flat_area)
+	sgData._flat_offset = np.ascontiguousarray(offsets)
+	sgData._flat_n_levels = np.ascontiguousarray(ct.n_breaks.astype(np.intc))
+	sgData._flat_cell_area = np.ascontiguousarray(ct.cell_areas)
+	sgData._flat_z_min = np.ascontiguousarray(ct.z_min)
 
 
 #===============================================================================
