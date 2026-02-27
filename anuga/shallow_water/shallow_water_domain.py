@@ -1451,6 +1451,67 @@ class Domain(Generic_Domain):
         self.subgridData.set_tables(cell_table, edge_table)
         self.use_subgrid = True
 
+        import numpy as _np_sgs
+
+        # ── Fix 1: replace SGS tables for "building cells" with flat-bed tables ─
+        # When the mesh elevation is set with heavy smoothing (alpha close to 1)
+        # some cells — typically near buildings — end up with
+        #   z_min  > bed_centroid
+        # because the fine-DEM minimum inside the triangle is above the smoothed
+        # mesh centroid elevation.  For these cells two things go wrong:
+        #
+        # (a) The C _openmp_protect function sets stage = z_min > bed_centroid
+        #     every timestep, creating phantom flat-bed depth and continuous
+        #     spurious mass outflow.
+        # (b) When real flood water enters such a cell, sg_stage_from_volume()
+        #     returns ~z_min (38 m in an extreme case) even for tiny volumes,
+        #     because all DEM data inside the triangle is above z_min.  That
+        #     creates enormous phantom stage / depth, destroying mass conservation.
+        #
+        # Fix: for these cells replace the SGS table with a two-breakpoint
+        # flat-bed (DE0) table anchored at bed_centroid.  The cell then behaves
+        # identically to a DE0 cell:
+        #   V(stage) = (stage − bed_centroid) × cell_area
+        # with z_min = bed_centroid.  This is physically appropriate because
+        # the mesh geometry (not the fine DEM) governs how water fills the cell
+        # when there is a fundamental mismatch between the two.
+        _bed_cv = self.quantities['elevation'].centroid_values
+        _z_min  = cell_table.z_min
+        _FLATBED_RANGE = 60.0   # m above bed_centroid for the flat-bed table span
+
+        _problem_cells = _z_min > _bed_cv
+        if _problem_cells.any():
+            for _k in _np_sgs.where(_problem_cells)[0]:
+                _bed_k  = float(_bed_cv[_k])
+                _area_k = float(cell_table.cell_areas[_k])
+                # Two-breakpoint flat-bed table:
+                #   V(stage) = (stage - bed_centroid) * area  for stage >= bed_centroid
+                cell_table.eta_breaks[_k, :] = _np_sgs.nan
+                cell_table.vol_cumul[_k,  :] = _np_sgs.nan
+                cell_table.wet_area[_k,   :] = _np_sgs.nan
+                cell_table.eta_breaks[_k, 0] = _bed_k
+                cell_table.eta_breaks[_k, 1] = _bed_k + _FLATBED_RANGE
+                cell_table.vol_cumul[_k,  0] = 0.0
+                cell_table.vol_cumul[_k,  1] = _FLATBED_RANGE * _area_k
+                cell_table.wet_area[_k,   0] = _area_k
+                cell_table.wet_area[_k,   1] = _area_k
+                cell_table.n_breaks[_k] = 2
+            cell_table.z_min[_problem_cells] = _bed_cv[_problem_cells]
+
+        # ── Fix 2: correct phantom stage for sub-grid-wet / flat-bed-dry cells ─
+        # If stage was initialised to bed_centroid (ANUGA's flat-bed dry state)
+        # but z_min < bed_centroid (sub-grid channel below the mesh bed), the
+        # cell has V_old = sg_volume_from_stage(bed_centroid) > 0.  On the first
+        # timestep _openmp_update_conserved_quantities sees:
+        #   V_new = V_phantom + dV  >>  dV
+        # so the stage jumps far above what the incoming flux warrants —
+        # catastrophic mass creation.  Setting stage = z_min gives V_old = 0.
+        # (After Fix 1, z_min ≤ bed_centroid for all cells, so this can only
+        # lower stage, never raise it above bed_centroid.)
+        _stage_cv = self.quantities['stage'].centroid_values
+        _phantom  = (_stage_cv > cell_table.z_min) & (_stage_cv <= _bed_cv)
+        _stage_cv[_phantom] = cell_table.z_min[_phantom]
+
         if verbose:
             print("Sub-grid terrain sampling enabled.")
 

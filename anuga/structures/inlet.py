@@ -105,8 +105,10 @@ class Inlet(object):
     
 
     def get_depths(self):
-    
-        return self.get_stages() - self.get_elevations()
+        # Clamp to >= 0: with sub-grid terrain sampling, stage can legitimately
+        # fall below the centroid elevation (stage tracks the sub-cell minimum),
+        # so raw stage - elev can be negative even for a physically dry cell.
+        return num.maximum(0.0, self.get_stages() - self.get_elevations())
     
     
     def get_total_water_volume(self):
