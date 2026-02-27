@@ -11,11 +11,18 @@ from anuga.subgrid.subgrid_tables import CellVolumeTable, EdgeAreaTable
 
 
 def _triangle_vertices(domain, cell_id):
-    """Return the 3 vertices of triangle cell_id as a (3,2) array."""
-    v = domain.vertex_coordinates
-    # vertex_coordinates is (n*3, 2) — rows [3k, 3k+1, 3k+2] are the 3 vertices
+    """Return the 3 vertices of triangle cell_id as a (3,2) array in absolute coordinates.
+
+    Uses absolute coordinates (adds mesh geo_reference offset if needed) so that
+    the returned vertices can be used to query a georeferenced raster DEM.
+    """
     i0 = 3 * cell_id
-    return v[i0:i0 + 3, :]
+    v = domain.vertex_coordinates[i0:i0 + 3, :].copy()
+    gr = domain.geo_reference
+    if not gr.is_absolute():
+        v[:, 0] += gr.get_xllcorner()
+        v[:, 1] += gr.get_yllcorner()
+    return v
 
 
 def _edge_endpoints(domain, cell_id, edge_index):
