@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ANUGA Tech-Debt Refactor Plan — Hydrata</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f7f8fa;
+    --bg-card: #ffffff;
+    --border: #e2e6ea;
+    --text: #1a1a2e;
+    --text-muted: #5a6275;
+    --accent: #2563eb;
+    --accent-light: #dbeafe;
+    --green: #16a34a;
+    --green-light: #dcfce7;
+    --amber: #d97706;
+    --amber-light: #fef3c7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --code-bg: #f1f5f9;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: var(--bg-alt);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem 1rem;
+  }
+
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 2px solid var(--border);
+  }
+
+  header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.25rem;
+  }
+
+  header .subtitle {
+    color: var(--text-muted);
+    font-size: 1rem;
+  }
+
+  header .meta {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+  }
+
+  header .meta span {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  header .meta a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  header .meta a:hover { text-decoration: underline; }
+
+  .toc {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow);
+  }
+
+  .toc h2 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+  }
+
+  .toc ol {
+    list-style: none;
+    counter-reset: toc;
+    padding: 0;
+  }
+
+  .toc ol li {
+    counter-increment: toc;
+    margin-bottom: 0.35rem;
+  }
+
+  .toc ol li::before {
+    content: counter(toc) ".";
+    color: var(--accent);
+    font-weight: 600;
+    margin-right: 0.5rem;
+    display: inline-block;
+    width: 1.5rem;
+  }
+
+  .toc a {
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.95rem;
+  }
+
+  .toc a:hover { color: var(--accent); }
+
+  section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.75rem 2rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+
+  section h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  section h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 1.25rem 0 0.5rem;
+  }
+
+  p { margin-bottom: 0.75rem; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0 1rem;
+    font-size: 0.9rem;
+  }
+
+  thead th {
+    background: var(--bg-alt);
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+
+  tbody td {
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--bg-alt); }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace;
+    background: var(--code-bg);
+    padding: 0.15em 0.4em;
+    border-radius: 4px;
+    font-size: 0.85em;
+  }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 0.75rem 0 1rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.15em 0.6em;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .badge-high { background: var(--red-light); color: var(--red); }
+  .badge-medium { background: var(--amber-light); color: var(--amber); }
+  .badge-low { background: var(--green-light); color: var(--green); }
+  .badge-phase { background: var(--accent-light); color: var(--accent); }
+  .badge-done { background: var(--green-light); color: var(--green); }
+  .badge-rejected { background: var(--bg-alt); color: var(--text-muted); }
+
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: var(--accent-light);
+    padding: 0.75rem 1rem;
+    border-radius: 0 6px 6px 0;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+
+  .callout.warning {
+    border-left-color: var(--amber);
+    background: var(--amber-light);
+  }
+
+  .callout.danger {
+    border-left-color: var(--red);
+    background: var(--red-light);
+  }
+
+  .checklist {
+    list-style: none;
+    padding: 0;
+  }
+
+  .checklist li {
+    padding: 0.35rem 0;
+    padding-left: 1.75rem;
+    position: relative;
+    font-size: 0.9rem;
+  }
+
+  .checklist li::before {
+    content: "☐";
+    position: absolute;
+    left: 0;
+    color: var(--text-muted);
+  }
+
+  .timeline {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 0;
+    position: relative;
+  }
+
+  .timeline::before {
+    content: "";
+    position: absolute;
+    left: 39px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+  }
+
+  .timeline-week {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 0.75rem 0;
+    text-align: right;
+    padding-right: 1.5rem;
+    position: relative;
+  }
+
+  .timeline-week::after {
+    content: "";
+    position: absolute;
+    right: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg-card);
+  }
+
+  .timeline-item {
+    padding: 0.75rem 0 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .timeline-item:last-child { border-bottom: none; }
+
+  .timeline-item strong {
+    display: block;
+    margin-bottom: 0.15rem;
+  }
+
+  .timeline-item span {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .diagram {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.25rem;
+    font-family: 'SF Mono', Menlo, monospace;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 0.75rem 0 1rem;
+  }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+
+  .stat-card {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .stat-card .number {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+  }
+
+  .stat-card .label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  footer {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 1rem 0.5rem; }
+    section { padding: 1.25rem; }
+    header h1 { font-size: 1.5rem; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    header .meta { gap: 1rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <h1>ANUGA Tech-Debt Refactor Plan</h1>
+  <p class="subtitle">Hydrata Fork — Modernisation Roadmap</p>
+  <div class="meta">
+    <span>Branch: <a href="https://github.com/Hydrata/anuga_core/tree/anuga-4.0-refactor-plan"><code>anuga-4.0-refactor-plan</code></a></span>
+    <span>Date: 2026-02-28</span>
+    <span>Upstream: <a href="https://github.com/anuga-community/anuga_core">anuga-community/anuga_core</a></span>
+  </div>
+</header>
+
+<!-- Current State -->
+<section id="state">
+  <h2>Current State at a Glance</h2>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <span class="number">1,319</span>
+      <span class="label">Tests</span>
+    </div>
+    <div class="stat-card">
+      <span class="number">~55%</span>
+      <span class="label">Coverage (est.)</span>
+    </div>
+    <div class="stat-card">
+      <span class="number">7,700+</span>
+      <span class="label">Duplicate Lines</span>
+    </div>
+    <div class="stat-card">
+      <span class="number">0</span>
+      <span class="label">Lint Rules</span>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th>Area</th><th>Problem</th><th>Impact</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Dependencies</strong></td>
+        <td><code>pyproject.toml</code> declares only <code>numpy</code> — missing scipy, netCDF4, meshpy, dill, pymetis, pyproj, affine, matplotlib</td>
+        <td><span class="badge badge-high">High</span></td>
+      </tr>
+      <tr>
+        <td><strong>Duplication</strong></td>
+        <td>Triplicated quantity kernels, duplicate parallel wrappers, redundant culvert classes</td>
+        <td><span class="badge badge-high">High</span></td>
+      </tr>
+      <tr>
+        <td><strong>Test Isolation</strong></td>
+        <td>47&times; <code>set_datadir('.')</code>, 198&times; <code>tempfile.mktemp()</code>, tests write <code>domain.sww</code> to CWD</td>
+        <td><span class="badge badge-high">High</span></td>
+      </tr>
+      <tr>
+        <td><strong>Linting</strong></td>
+        <td>No linter, formatter, type checker, or pre-commit hooks configured</td>
+        <td><span class="badge badge-medium">Medium</span></td>
+      </tr>
+      <tr>
+        <td><strong>Build</strong></td>
+        <td><code>setup.py</code> coexists with Meson — confusing for contributors</td>
+        <td><span class="badge badge-low">Low</span></td>
+      </tr>
+      <tr>
+        <td><strong>Python version</strong></td>
+        <td><code>requires-python = "&gt;3.8, &lt;3.14"</code> — wrong syntax, should be <code>&gt;=3.9</code></td>
+        <td><span class="badge badge-low">Low</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- Table of Contents -->
+<nav class="toc">
+  <h2>Phases</h2>
+  <ol>
+    <li><a href="#phase0">Phase 0 — Test Infrastructure <em>("Refactor Without Fear")</em></a></li>
+    <li><a href="#phase1">Phase 1 — Dependency Consolidation</a></li>
+    <li><a href="#phase2">Phase 2 — Linting &amp; Code Quality</a></li>
+    <li><a href="#phase3">Phase 3 — Code Deduplication &amp; Modular Structure</a></li>
+    <li><a href="#phase4">Phase 4 — Expanded Test Coverage</a></li>
+    <li><a href="#fork">Fork / Upstream Management Strategy</a></li>
+    <li><a href="#timeline">Timeline</a></li>
+    <li><a href="#decisions">Decisions Log</a></li>
+  </ol>
+</nav>
+
+<!-- Phase 0 -->
+<section id="phase0">
+  <h2><span class="badge badge-phase">Phase 0</span> Test Infrastructure</h2>
+  <p><strong>Goal:</strong> Establish a test harness that catches regressions before any refactoring begins.</p>
+
+  <h3>0.1 Fix Test Isolation</h3>
+  <table>
+    <thead><tr><th>Problem</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>7+ tests write <code>domain.sww</code> to CWD</td><td>Use <code>tmp_path</code> fixture or <code>tempfile.mkdtemp()</code></td></tr>
+      <tr><td>47&times; <code>set_datadir('.')</code></td><td>Replace with <code>tmp_path</code></td></tr>
+      <tr><td>198&times; <code>tempfile.mktemp()</code></td><td>Replace with <code>tempfile.mkstemp()</code> or <code>tmp_path</code></td></tr>
+      <tr><td>Logging permanently disabled</td><td>Use <code>caplog</code> fixture or scoped disable</td></tr>
+      <tr><td>Tests depend on execution order</td><td>Each test creates its own domain</td></tr>
+    </tbody>
+  </table>
+
+  <h3>0.2 Add Test Markers</h3>
+  <p>Tag ~50 slowest tests with <code>@pytest.mark.slow</code>. This enables a fast feedback loop:</p>
+  <pre><code>pytest -m "not slow"          # fast feedback (~5 min)
+pytest -m slow                # full suite (~38 min)</code></pre>
+
+  <h3>0.3 Golden-Master Snapshots</h3>
+  <p>Install <code>pytest-regressions</code> and create numerical snapshots for critical solver paths:</p>
+  <pre><code>def test_evolve_bedslope(num_regression):
+    domain = create_bedslope_domain(tmp_path)
+    for _ in domain.evolve(yieldstep=0.1, finaltime=1.0):
+        pass
+    num_regression.check(
+        {"stage": domain.quantities["stage"].centroid_values,
+         "xmom": domain.quantities["xmomentum"].centroid_values},
+        default_tolerance=dict(atol=1e-10, rtol=1e-10),
+    )</code></pre>
+  <p>Target: 8–12 golden-master tests covering evolve, distribute, extrapolate, and compute_fluxes.</p>
+
+  <h3>0.4 Coverage Baseline &amp; Enforcement</h3>
+  <p>Set <code>fail_under = 55</code> in <code>.coveragerc</code> (current baseline). Install <code>diff-cover</code> for PR enforcement at 80% on changed lines.</p>
+
+  <h3>0.5 CI Test Matrix</h3>
+  <p>GitHub Actions workflow testing on Python 3.10, 3.12, 3.13. Slow tests only on push to <code>main</code>.</p>
+
+  <h3>Deliverables</h3>
+  <ul class="checklist">
+    <li>All tests pass in isolated <code>tmp_path</code> directories</li>
+    <li><code>pytest -m "not slow"</code> completes in &lt;5 minutes</li>
+    <li>8–12 golden-master snapshots for core solver paths</li>
+    <li>Coverage baseline with <code>fail_under=55</code></li>
+    <li><code>diff-cover</code> enforcing 80% on changed lines</li>
+    <li>CI running on Python 3.10 / 3.12 / 3.13</li>
+  </ul>
+</section>
+
+<!-- Phase 1 -->
+<section id="phase1">
+  <h2><span class="badge badge-phase">Phase 1</span> Dependency Consolidation</h2>
+  <p><strong>Goal:</strong> Make <code>pip install anuga</code> actually work by declaring real dependencies.</p>
+
+  <h3>1.1 Fix pyproject.toml</h3>
+  <p>Add all actual runtime dependencies:</p>
+  <pre><code>dependencies = [
+    "numpy>=2.0.0",
+    "scipy>=1.11",
+    "netCDF4>=1.6",
+    "matplotlib>=3.7",
+    "meshpy>=2022.1",
+    "dill>=0.3.7",
+    "pymetis>=2023.1",
+    "pyproj>=3.6",
+    "affine>=2.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-regressions>=2.5", "diff-cover>=7.0", "ruff>=0.1"]
+parallel = ["mpi4py>=3.1"]</code></pre>
+
+  <h3>1.2 Remove Dead Dependencies</h3>
+  <table>
+    <thead><tr><th>Dependency</th><th>Status</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td>cartopy</td><td>Never imported</td><td>Remove references</td></tr>
+      <tr><td>openpyxl</td><td>Never imported</td><td>Remove references</td></tr>
+      <tr><td>GDAL/osgeo</td><td>Partially removed</td><td>Complete removal (continue <code>remove-gdal</code>)</td></tr>
+      <tr><td><code>setup.py</code></td><td>Superseded by Meson</td><td>Delete after verifying <code>pip install .</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>1.3 Fix Python Version</h3>
+  <p>Change to <code>requires-python = ">=3.9, &lt;3.14"</code></p>
+
+  <h3>Deliverables</h3>
+  <ul class="checklist">
+    <li><code>pip install .</code> succeeds on a clean venv</li>
+    <li><code>pip install ".[dev]"</code> provides test/lint tooling</li>
+    <li>No phantom dependencies remain</li>
+    <li><code>setup.py</code> removed</li>
+  </ul>
+</section>
+
+<!-- Phase 2 -->
+<section id="phase2">
+  <h2><span class="badge badge-phase">Phase 2</span> Linting &amp; Code Quality</h2>
+  <p><strong>Goal:</strong> Establish automated code quality enforcement with Ruff.</p>
+
+  <h3>2.1 Ruff Configuration</h3>
+  <pre><code>[tool.ruff]
+target-version = "py39"
+line-length = 120
+src = ["anuga"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP", "S"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"anuga/*/test_*.py" = ["S101"]</code></pre>
+
+  <h3>2.2 Pre-commit Hooks</h3>
+  <pre><code># .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format</code></pre>
+
+  <h3>2.3 Incremental Enforcement</h3>
+  <div class="callout warning">
+    <strong>Fork management:</strong> Never bulk-format the entire codebase. This creates massive merge conflicts with upstream. Only format files you're already modifying.
+  </div>
+
+  <h3>Deliverables</h3>
+  <ul class="checklist">
+    <li><code>ruff check</code> passes with agreed ignore list</li>
+    <li>Pre-commit hooks installed and documented</li>
+    <li>CI runs <code>ruff check</code> on PRs</li>
+  </ul>
+</section>
+
+<!-- Phase 3 -->
+<section id="phase3">
+  <h2><span class="badge badge-phase">Phase 3</span> Code Deduplication &amp; Modular Structure</h2>
+  <p><strong>Goal:</strong> Reduce ~7,700 lines of duplication and establish separation of concerns.</p>
+
+  <h3>3.1 Unify Quantity Kernels</h3>
+  <p>Merge three near-identical files (<code>quantity_ext.pyx</code>, <code>quantity_ext_openmp.pyx</code>, <code>quantity_ext2.pyx</code>) into a single source with compile-time OpenMP toggle. OpenMP pragmas are no-ops when compiled without <code>-fopenmp</code>.</p>
+
+  <h3>3.2 Consolidate Parallel Operator Wrappers</h3>
+  <p>5 files in <code>parallel/</code> thin-wrap their <code>structures/</code> counterparts. Move MPI-awareness into base classes with a <code>self.parallel</code> flag.</p>
+
+  <h3>3.3 Merge Duplicate Culvert Classes</h3>
+  <p>Extract shared logic from <code>Culvert_operator</code> and <code>Culvert_operator_Parallel</code> into a base class. Parallel version overrides <code>distribute()</code> only.</p>
+
+  <h3>3.4 Clean Up Utility Modules</h3>
+  <p>Split <code>system_tools.py</code> (750 lines) into <code>file_utils.py</code>, <code>env_utils.py</code>, <code>version_utils.py</code>. Deduplicate <code>numerical_tools.py</code> vs scipy wrappers.</p>
+
+  <h3>Deliverables</h3>
+  <ul class="checklist">
+    <li>Single quantity extension source (serial + OpenMP from one <code>.pyx</code>)</li>
+    <li>Parallel operators consolidated (5 wrapper files removed)</li>
+    <li>Culvert classes deduplicated</li>
+    <li>Utility modules split and focused</li>
+    <li>All golden-master tests still pass</li>
+  </ul>
+</section>
+
+<!-- Phase 4 -->
+<section id="phase4">
+  <h2><span class="badge badge-phase">Phase 4</span> Expanded Test Coverage</h2>
+  <p><strong>Goal:</strong> Lift meaningful coverage and fill gaps identified during refactoring.</p>
+
+  <h3>4.1 Modernise Test Patterns</h3>
+  <p>Add <code>conftest.py</code> with shared fixtures (e.g., <code>domain</code> fixture). Convert key tests from <code>unittest.TestCase</code> to plain pytest where it simplifies the code.</p>
+
+  <h3>4.2 Integrate Validation Tests</h3>
+  <p>Wire the 5 existing <code>validate_*.py</code> scripts into pytest's collection mechanism.</p>
+
+  <h3>4.3 Coverage Targets</h3>
+  <table>
+    <thead><tr><th>Module</th><th>Current (est.)</th><th>Target</th><th>Priority</th></tr></thead>
+    <tbody>
+      <tr><td><code>shallow_water/</code></td><td>~65%</td><td>80%</td><td><span class="badge badge-high">High</span></td></tr>
+      <tr><td><code>fit_interpolate/</code></td><td>~50%</td><td>70%</td><td><span class="badge badge-high">High</span></td></tr>
+      <tr><td><code>structures/</code></td><td>~55%</td><td>75%</td><td><span class="badge badge-high">High</span></td></tr>
+      <tr><td><code>file_conversion/</code></td><td>~40%</td><td>60%</td><td><span class="badge badge-medium">Medium</span></td></tr>
+      <tr><td><code>geometry/</code></td><td>~70%</td><td>85%</td><td><span class="badge badge-low">Low</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Deliverables</h3>
+  <ul class="checklist">
+    <li>Shared <code>conftest.py</code> with <code>domain</code> fixture</li>
+    <li>Validation tests discoverable by pytest</li>
+    <li>Coverage <code>fail_under</code> raised to 65%</li>
+    <li><code>diff-cover</code> threshold maintained at 80% for new code</li>
+  </ul>
+</section>
+
+<!-- Fork/Upstream -->
+<section id="fork">
+  <h2>Fork / Upstream Management Strategy</h2>
+
+  <h3>Current Divergence</h3>
+  <table>
+    <thead><tr><th>Branch</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td><code>main</code></td><td><span class="badge badge-done">In sync</span> with <code>upstream/main</code></td></tr>
+      <tr><td><code>claude-experiments</code></td><td>55 commits ahead (GDAL removal + subgrid terrain)</td></tr>
+      <tr><td><code>feature/subgrid-terrain-sampling</code></td><td>37 commits ahead</td></tr>
+      <tr><td><code>remove-gdal</code></td><td>40 commits ahead</td></tr>
+      <tr><td><code>upstream develop</code></td><td><strong>116 commits ahead</strong> — stoiver refactoring evolve loop</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Critical Overlap Zones</h3>
+  <p>10 files modified by <strong>both</strong> Hydrata branches and upstream <code>develop</code>:</p>
+  <table>
+    <thead><tr><th>File</th><th>Risk</th><th>Upstream</th><th>Hydrata</th></tr></thead>
+    <tbody>
+      <tr><td><code>shallow_water_domain.py</code></td><td><span class="badge badge-high">High</span></td><td>Evolve loop refactor</td><td>GDAL removal, subgrid hooks</td></tr>
+      <tr><td><code>sw_domain_openmp_ext.pyx</code></td><td><span class="badge badge-high">High</span></td><td>Centroid-based extrapolation</td><td>OpenMP changes</td></tr>
+      <tr><td><code>sw_domain.h</code></td><td><span class="badge badge-high">High</span></td><td>New struct fields</td><td>Subgrid fields</td></tr>
+      <tr><td><code>generic_domain.py</code></td><td><span class="badge badge-medium">Medium</span></td><td>Evolve refactor</td><td>Minor edits</td></tr>
+      <tr><td><code>quantity.py</code></td><td><span class="badge badge-medium">Medium</span></td><td>Centroid distribution</td><td>Subgrid sampling</td></tr>
+      <tr><td><code>fit.py</code></td><td><span class="badge badge-low">Low</span></td><td>Bug fixes</td><td>GDAL removal</td></tr>
+      <tr><td><code>asc2dem.py</code></td><td><span class="badge badge-low">Low</span></td><td>Minor</td><td>GDAL → rasterio</td></tr>
+      <tr><td><code>dem2pts.py</code></td><td><span class="badge badge-low">Low</span></td><td>Minor</td><td>GDAL → rasterio</td></tr>
+      <tr><td><code>sww2dem.py</code></td><td><span class="badge badge-low">Low</span></td><td>Minor</td><td>GDAL → rasterio</td></tr>
+      <tr><td><code>pmesh2domain.py</code></td><td><span class="badge badge-low">Low</span></td><td>Minor</td><td>Minor</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Branching Model</h3>
+  <div class="diagram">upstream/main ──────────────────────────────────────────────▶
+     │
+     ├── origin/main (kept in sync, never diverge)
+     │       │
+     │       ├── anuga-4.0-refactor-plan (this plan + Phase 0–4)
+     │       │
+     │       ├── remove-gdal (GDAL→rasterio, upstream PR candidate)
+     │       │
+     │       └── feature/subgrid-terrain-sampling (Hydrata-specific)
+     │
+upstream/develop ──────────────────────────────────────────▶
+     (116 commits ahead — evolve loop refactor by stoiver)</div>
+
+  <h3>Rules for Fork Hygiene</h3>
+  <table>
+    <thead><tr><th>#</th><th>Rule</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><strong>Keep <code>main</code> in sync.</strong> Regularly merge <code>upstream/main</code> into <code>origin/main</code>.</td></tr>
+      <tr><td>2</td><td><strong>Rebase feature branches on <code>main</code>, not <code>develop</code>.</strong> Upstream develop is unstable.</td></tr>
+      <tr><td>3</td><td><strong>Submit upstream-worthy changes as separate PRs</strong> (dependency fixes, test isolation, linting).</td></tr>
+      <tr><td>4</td><td><strong>Never bulk-format files you're not changing.</strong> #1 source of merge conflicts.</td></tr>
+      <tr><td>5</td><td><strong>Monitor upstream <code>develop</code>.</strong> When PR #115 merges, rebase and resolve HIGH-risk conflicts.</td></tr>
+      <tr><td>6</td><td><strong>Coordinate with samcom12 on C/Cython.</strong> GPU fork touches the same quantity kernels.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Changes to Upstream as PRs</h3>
+  <table>
+    <thead><tr><th>Change</th><th>Priority</th><th>Rationale</th></tr></thead>
+    <tbody>
+      <tr><td>Dependency declaration fixes</td><td><span class="badge badge-high">Immediate</span></td><td>Uncontroversial, benefits everyone</td></tr>
+      <tr><td>Test isolation fixes</td><td><span class="badge badge-high">High</span></td><td>Improves CI for the whole community</td></tr>
+      <tr><td><code>setup.py</code> removal</td><td><span class="badge badge-medium">Medium</span></td><td>Coordinate with stoiver</td></tr>
+      <tr><td>Ruff / linting config</td><td><span class="badge badge-medium">Medium</span></td><td>Needs community buy-in</td></tr>
+      <tr><td>GDAL → rasterio</td><td><span class="badge badge-low">After discuss</span></td><td>Big change, needs upstream review</td></tr>
+      <tr><td>Quantity kernel unification</td><td><span class="badge badge-low">After coordinate</span></td><td>Overlaps with samcom12 GPU work</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Sync Cadence</h3>
+  <table>
+    <thead><tr><th>Action</th><th>Frequency</th></tr></thead>
+    <tbody>
+      <tr><td><code>git fetch upstream</code></td><td>Weekly</td></tr>
+      <tr><td>Merge <code>upstream/main</code> → <code>origin/main</code></td><td>When upstream advances</td></tr>
+      <tr><td>Check <code>develop</code> for conflicts</td><td>Before Phase 3 C/Cython work</td></tr>
+      <tr><td>Rebase feature branches</td><td>After each upstream merge</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- Timeline -->
+<section id="timeline">
+  <h2>Timeline</h2>
+
+  <div class="timeline">
+    <div class="timeline-week">Wk 1–2</div>
+    <div class="timeline-item">
+      <strong>Phase 0: Test Infrastructure</strong>
+      <span>Fix isolation, add markers, create golden-master snapshots, set up CI</span>
+    </div>
+
+    <div class="timeline-week">Wk 3</div>
+    <div class="timeline-item">
+      <strong>Phase 1: Dependency Consolidation</strong>
+      <span>Fix pyproject.toml, remove dead deps, fix Python version spec</span>
+    </div>
+
+    <div class="timeline-week">Wk 4–5</div>
+    <div class="timeline-item">
+      <strong>Phase 2: Linting &amp; Code Quality</strong>
+      <span>Ruff config, pre-commit hooks, incremental enforcement</span>
+    </div>
+
+    <div class="timeline-week">Wk 6–8</div>
+    <div class="timeline-item">
+      <strong>Phase 3: Code Deduplication</strong>
+      <span>Unify quantity kernels, consolidate parallel wrappers, merge culvert classes</span>
+    </div>
+
+    <div class="timeline-week">Wk 9–10</div>
+    <div class="timeline-item">
+      <strong>Phase 4: Test Coverage</strong>
+      <span>Modern test patterns, validation integration, coverage targets</span>
+    </div>
+  </div>
+
+  <p style="margin-top:1rem; font-size:0.9rem; color:var(--text-muted);">Phases 1 and 2 can run in parallel after Phase 0 completes.</p>
+</section>
+
+<!-- Decisions -->
+<section id="decisions">
+  <h2>Decisions Log</h2>
+  <table>
+    <thead><tr><th>Decision</th><th>Rationale</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="badge badge-rejected">Rejected</span> Mutation testing</td>
+        <td>Poor ROI: can't mutate Cython, tolerance-based assertions kill most mutants, 50K+ mutants would take days</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-rejected">Deferred</span> Property-based testing</td>
+        <td>Valuable but not a prerequisite — defer to Phase 4</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-done">Adopted</span> pytest-regressions</td>
+        <td>Purpose-built for numpy array tolerance comparisons, baselines in VCS</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-done">Adopted</span> diff-cover</td>
+        <td>Enforces quality on new/changed code without massive backfill</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-done">Adopted</span> Ruff</td>
+        <td>Single tool replaces linter + formatter + import sorter, 10–100× faster</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-done">Adopted</span> Incremental formatting</td>
+        <td>Bulk reformatting creates merge conflicts with upstream and GPU fork</td>
+      </tr>
+      <tr>
+        <td><span class="badge badge-done">Adopted</span> Upstream PRs for generic fixes</td>
+        <td>Dependency fixes, test isolation, linting benefit the whole community</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  ANUGA Refactor Plan &mdash; Hydrata/anuga_core &mdash; 2026-02-28
+</footer>
+
+</div>
+</body>
+</html>
