@@ -231,7 +231,7 @@ def communicate_ghosts_non_blocking(domain, quantities=None):
     # communication calls above and this call.
     #-----------------------------------------
     import mpi4py
-    re=mpi4py.MPI.Request.Waitall(recv_requests)
+    mpi4py.MPI.Request.Waitall(recv_requests + send_requests)
 
 
     # Now copy data from receive buffers to the domain
