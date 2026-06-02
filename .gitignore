@@ -3,6 +3,10 @@
 
 .#*
 [#]*#
+*.code-workspace
+
+# Generated version file (created at build time by meson configure_file)
+anuga/_version.py
 *~
 *$
 *.csv
@@ -21,6 +25,7 @@
 *.c
 *.cpp
 *.tmp
+*.txt
 *.vim
 *.sww
 *.tif
@@ -39,6 +44,7 @@
 *.html
 *.pickle
 tags
+OUTPUT
 
 # validation temp files #
 #########################
@@ -219,3 +225,4 @@ doc/source/generated
 ###################################
 anuga/__config__.py
 anuga/version.py
+benchmarks/results/

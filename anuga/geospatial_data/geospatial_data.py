@@ -13,16 +13,10 @@ from warnings import warn
 from copy import deepcopy
 import copy
 
-try:
-    from exceptions import Exception
-except:
-    pass
-
 from anuga.file.netcdf import NetCDFFile
 import numpy as num
 from numpy.random import randint, seed
 
-from anuga.coordinate_transforms.lat_long_UTM_conversion import UTMtoLL
 from anuga.utilities.numerical_tools import ensure_numeric
 from anuga.coordinate_transforms.geo_reference import Geo_reference, \
     TitleError, DEFAULT_ZONE, ensure_geo_reference, write_NetCDF_georeference
@@ -225,7 +219,7 @@ class Geospatial_data(object):
         for key in list(attributes.keys()):
             try:
                 attributes[key] = ensure_numeric(attributes[key])
-            except:
+            except (ValueError, TypeError):
                 msg = ("Attribute '%s' (%s) could not be converted to a"
                        "numeric vector" % (str(key), str(attributes[key])))
                 raise Exception(msg)
@@ -357,15 +351,15 @@ class Geospatial_data(object):
         if as_lat_long is True:
             msg = "Points need a zone to be converted into lats and longs"
             assert self.geo_reference is not None, msg
-            zone = self.geo_reference.get_zone()
             assert self.geo_reference.get_zone() is not DEFAULT_ZONE, msg
-            lats_longs = []
-            for point in self.get_data_points(True):
-                # UTMtoLL(northing, easting, zone,
-                lat_calced, long_calced = UTMtoLL(point[1], point[0],
-                                                  zone, isSouthHemisphere)
-                lats_longs.append((lat_calced, long_calced))  # to hash
-            return lats_longs
+            from anuga.coordinate_transforms.redfearn import epsg_to_ll
+            pts = self.get_data_points(True)
+            epsg = self.geo_reference.get_epsg()
+            if epsg is None:
+                zone = self.geo_reference.get_zone()
+                epsg = 32700 + zone if isSouthHemisphere else 32600 + zone
+            lats, lons = epsg_to_ll(pts[:, 0], pts[:, 1], epsg)
+            return list(zip(lats.tolist(), lons.tolist()))
 
         if absolute is True and geo_reference is None:
             return self.geo_reference.get_absolute(self.data_points)
@@ -1089,7 +1083,7 @@ def _read_pts_file_header(fid, verbose=False):
 
     try:  # netcdf4
         number_of_points = len(fid.dimensions['number_of_points'])
-    except:  # scientific python
+    except (TypeError, AttributeError):  # scientific python
         number_of_points = fid.dimensions['number_of_points']
 
     return geo_reference, keys, number_of_points
@@ -1404,7 +1398,7 @@ def find_optimal_smoothing_parameter(data_file,
 
     from anuga.shallow_water.shallow_water_domain import Domain
     from anuga.geospatial_data.geospatial_data import Geospatial_data
-    from anuga.pmesh.mesh_interface import create_mesh_from_regions
+    from anuga.pmesh.mesh_interface import create_pmesh_from_regions
     from anuga.utilities.numerical_tools import cov
     from anuga.geometry.polygon import is_inside_polygon
     from anuga.fit_interpolate.benchmark_least_squares import mem_usage
@@ -1431,7 +1425,7 @@ def find_optimal_smoothing_parameter(data_file,
                      [west_boundary, north_boundary],
                      [west_boundary, south_boundary]]
 
-        create_mesh_from_regions(poly_topo,
+        create_pmesh_from_regions(poly_topo,
                                  boundary_tags={'back': [2],
                                                 'side': [1, 3],
                                                 'ocean': [0]},
@@ -1608,7 +1602,7 @@ def old_find_optimal_smoothing_parameter(data_file,
 
     from anuga.shallow_water.shallow_water_domain import Domain
     from anuga.geospatial_data.geospatial_data import Geospatial_data
-    from anuga.pmesh.mesh_interface import create_mesh_from_regions
+    from anuga.pmesh.mesh_interface import create_pmesh_from_regions
     from anuga.utilities.numerical_tools import cov
     from anuga.geometry.polygon import is_inside_polygon
     from anuga.fit_interpolate.benchmark_least_squares import mem_usage
@@ -1633,7 +1627,7 @@ def old_find_optimal_smoothing_parameter(data_file,
                      [west_boundary, north_boundary],
                      [west_boundary, south_boundary]]
 
-        create_mesh_from_regions(poly_topo,
+        create_pmesh_from_regions(poly_topo,
                                  boundary_tags={'back': [2],
                                                 'side': [1, 3],
                                                 'ocean': [0]},

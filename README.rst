@@ -3,19 +3,11 @@
     :target: https://app.gitter.im/#/room/#anuga-community:gitter.im
     :alt: Community Chat
 
-..
-    |badge1| image:: https://img.shields.io/travis/com/anuga-community/anuga_core/develop_hackathon.svg
-    :target: https://app.travis-ci.com/anuga-community/anuga_core
-    :alt: Travis CI Status
 
 .. |badge1| image:: https://github.com/anuga-community/anuga_core/actions/workflows/conda-setup.yml/badge.svg
     :target: https://github.com/anuga-community/anuga_core/actions/workflows/conda-setup.yml
     :alt: GitHub Actions Status
-   
-.. 
-    |badge2| image:: https://ci.appveyor.com/api/projects/status/x5airjv7eq2u805w/branch/main?svg=true
-    :target: https://ci.appveyor.com/project/stoiver/anuga-core-nwgr0
-    :alt: appveyor status
+
 
 .. |badge3| image:: https://img.shields.io/pypi/v/anuga.svg
     :target: https://pypi.python.org/pypi/anuga/
@@ -37,7 +29,11 @@
     :target: https://anuga.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-|badge0| |badge1| |badge3| |badge4| |badge5| |badge6| |badge7|
+.. |badge8| image:: https://github.com/codespaces/badge.svg
+    :target: https://codespaces.new/anuga-community/anuga_core
+    :alt: Open in GitHub Codespaces
+
+|badge0| |badge1| |badge3| |badge4| |badge5| |badge6| |badge7| |badge8|
 
 
 
@@ -98,6 +94,17 @@ Once the conda-forge channel has been enabled, anuga can be installed with conda
 
 
 For more installation instructions, see https://anuga.readthedocs.io/en/latest/installation.html
+
+
+GitHub Codespaces
+-----------------
+
+Click the **Open in GitHub Codespaces** badge above to launch ANUGA in a fully configured
+cloud environment — no local install required. The environment installs all dependencies
+and compiles the C/Cython extensions automatically.
+
+Once the Codespace is ready, open any notebook and select the **Python (anuga_env)** kernel
+from the kernel picker in the top-right corner.
 
 
 Documentation and Help

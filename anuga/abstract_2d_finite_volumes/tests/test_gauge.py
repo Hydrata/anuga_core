@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-
-
-from builtins import next
-from builtins import str
 import unittest
 import tempfile
 import os
@@ -14,7 +10,7 @@ import anuga
 
 from anuga.abstract_2d_finite_volumes.gauge import sww2csv_gauges
 from anuga.utilities.numerical_tools import mean
-from anuga.pmesh.mesh import Mesh
+from anuga.pmesh.mesh import Pmesh
 from anuga.file.sww import SWW_file
 
 
@@ -33,7 +29,7 @@ class Test_Gauge(unittest.TestCase):
         mesh_file = tempfile.mktemp(".tsh")
 
         points = [[0.0,0.0],[6.0,0.0],[6.0,6.0],[0.0,6.0]]
-        m = Mesh()
+        m = Pmesh()
         m.add_vertices(points)
         m.auto_segment()
         m.generate_mesh(verbose=False)
@@ -158,12 +154,12 @@ point2, 0.5, 2.0, 9.0\n")
             os.remove(points_file)
             os.remove(point1_filename)
             os.remove(point2_filename)
-        except:
+        except OSError:
             pass
 
 
     def test_sww2csv_gauges1(self):
-        from anuga.pmesh.mesh import Mesh
+        from anuga.pmesh.mesh import Pmesh
         from csv import reader,writer
         import time
         import string
@@ -234,7 +230,7 @@ point2, 0.5, 2.0\n")
             os.remove(points_file)
             os.remove(point1_filename)
             os.remove(point2_filename)
-        except:
+        except OSError:
             pass       
         
 
@@ -308,13 +304,13 @@ point2, 0.5, 2.0, 9.0\n")
             os.remove(points_file)
             os.remove(point1_filename)
             os.remove(point2_filename)
-        except:
+        except OSError:
             pass
 
 
        
     def test_sww2csv_gauge_point_off_mesh(self):
-        from anuga.pmesh.mesh import Mesh
+        from anuga.pmesh.mesh import Pmesh
         from csv import reader,writer
         import time
         import string
@@ -360,7 +356,7 @@ offmesh2, 50.5, 20.25\n")
         # clean up
         try:
             os.remove(points_file)
-        except:
+        except OSError:
             pass
         
         
@@ -434,7 +430,7 @@ point2, 4.5, 4.0, 9.0\n")
             os.remove(points_file)
             os.remove(point1_filename)
             os.remove(point2_filename)
-        except:
+        except OSError:
             pass
 
 
@@ -485,32 +481,40 @@ point1, 2.5, 4.25, 3.0\n")
         try:
             os.remove(points_file)
             os.remove(point1_filename)
-        except:
+        except OSError:
             pass
 
     def test_sww2csv_multiple_files(self):
         """
-        This is testing the sww2csv_gauges function, by creating multiple 
+        This is testing the sww2csv_gauges function, by creating multiple
         sww files and then exporting the gauges and checking the results.
         """
+        import shutil
+        tmpdir = tempfile.mkdtemp()
+        orig_dir = os.getcwd()
+        os.chdir(tmpdir)
+        try:
+            self._test_sww2csv_multiple_files_impl()
+        finally:
+            self.sww = None  # files are inside tmpdir; tearDown must not touch them
+            os.chdir(orig_dir)
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def _test_sww2csv_multiple_files_impl(self):
         timestep=2.0
         domain = self.domain
         domain.set_starttime(0.)
+        domain.set_datadir('.')
+
         # Create two sww files with timestep at end. These are to be
         # stored consecutively in the gauge csv files
         basename='datatest1'
-        domain.set_name(basename) 
+        domain.set_name(basename)
         self._create_sww(stage=10.,timestep=timestep)
 
-        domain.set_name(basename+str(time.time())) 
+        domain.set_name(basename+str(time.time()))
         domain.set_time(domain.get_time()+timestep)
         self._create_sww(stage=20.,timestep=timestep)
-
-        #points_file = tempfile.mktemp(".csv")
-        #file_id = open(points_file,"w")
-
-        # test the function at these points
-        points = [[5.0,1.],[0.5,2.]]
 
         # create a csv file containing our gauge points
         points_file = tempfile.mktemp(".csv")
@@ -520,15 +524,11 @@ point1, 5.0, 1.0\n\
 point2, 0.5, 2.0\n")
         points_handle.close()
 
-
-        sww2csv_gauges(basename+".sww", 
+        sww2csv_gauges(basename+".sww",
                        points_file,
                        quantities=['stage', 'elevation'],
                        use_cache=False,
                        verbose=False)
-
-        point1_answers_array = [[0.0,1.0,-5.0], [2.0,10.0,-5.0],[4.0,10.0,-5.0],
-                                [6.0,20.0,-5.0], [0.0,1.0,-5.0]]
 
         point1_answers_array = [[0.0, 1.0, -3.0], [2.0, 10.0, -3.0],
                                [4.0, 10.0, -3.0], [6.0, 20.0, -3.0]]
@@ -542,45 +542,25 @@ point2, 0.5, 2.0\n")
         for i,row in enumerate(point1_reader):
             # note the 'hole' (element 1) below - skip the new 'hours' field
             line.append([float(row[0]),float(row[2]),float(row[3])])
-            #print 'i', i
-            #print 'row',row
-            #print 'line',line[i],'point1',point1_answers_array[i]
             assert num.allclose(line[i], point1_answers_array[i])
+        point1_handle.close()
 
-        #point2_answers_array = [[0.0,1.0,-0.5], [2.0,10.0,-0.5],[4.0,10.0,-0.5],
-        #                        [6.0,20.0,-0.5], [0.0,1.0,-0.5]]
         point2_answers_array = [[0.0, 1.0, -2.416666666666667],
                                 [2.0, 10.000000000000002, -2.416666666666667],
                                 [4.0, 10.000000000000002, -2.416666666666667],
                                 [6.0, 20.000000000000004, -2.416666666666667]]
 
-
-
-            
-        point2_filename = 'gauge_point2.csv' 
+        point2_filename = 'gauge_point2.csv'
         point2_handle = open(point2_filename)
         point2_reader = reader(point2_handle)
         next(point2_reader)
-                        
+
         line=[]
         for i,row in enumerate(point2_reader):
             # note the 'hole' (element 1) below - skip the new 'hours' field
             line.append([float(row[0]),float(row[2]),float(row[3])])
-            #print 'line',line[i],'point2'#,point2_answers_array[i]
             assert num.allclose(line[i], point2_answers_array[i])
-                         
-        # clean up
-        point1_handle.close()
         point2_handle.close()
-
-        try:
-            os.remove(points_file)
-            os.remove(point1_filename)
-            os.remove(point2_filename)
-            #remove second swwfile not removed by tearDown
-            os.remove(basename+".sww")
-        except:
-            pass       
 
 
 #-------------------------------------------------------------

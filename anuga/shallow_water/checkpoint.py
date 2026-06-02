@@ -18,7 +18,7 @@ domain = load_last_checkpoint_file(domain_name, checkpoint_dir)
 
 from anuga import send, receive, myid, numprocs, barrier
 from time import time as walltime
-import os
+
 
 
 def load_checkpoint_file(domain_name = 'domain', checkpoint_dir = '.', time = None):
@@ -28,14 +28,12 @@ def load_checkpoint_file(domain_name = 'domain', checkpoint_dir = '.', time = No
     if numprocs > 1:
         domain_name = domain_name+'_P{}_{}'.format(numprocs,myid)
 
-
     if time is None:
         # will pull out the last available time
         times = _get_checkpoint_times(domain_name, checkpoint_dir)
 
         times = list(times)
         times.sort()
-        #print times
     else:
         times = [float(time)]
 
@@ -49,11 +47,11 @@ def load_checkpoint_file(domain_name = 'domain', checkpoint_dir = '.', time = No
         try:
             try:
                 import dill as pickle
-            except:
+            except ImportError:
                 import pickle
             domain = pickle.load(open(pickle_name, 'rb'))
             success = True
-        except:
+        except Exception:
             success = False
 
         #print success
