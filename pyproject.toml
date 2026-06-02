@@ -68,8 +68,9 @@ dev = [
     'pytest',
     'psutil',
 ]
-
-[project.optional-dependencies]
+# Hydrata-added extra (KEEP across upstream syncs): rasterio/pyproj for the
+# spatialInputUtil fallback. Folded into the single optional-dependencies
+# table — a duplicate [project.optional-dependencies] header is a TOML error.
 io = ["rasterio>=1.3", "pyproj>=3.4"]
 
 [project.urls]
