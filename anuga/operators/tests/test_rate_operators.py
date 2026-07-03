@@ -1782,6 +1782,84 @@ class Test_rate_operators(unittest.TestCase):
         assert num.allclose(float(rr[4]), 0.0)
 
 
+    def test_rate_operator_empty_partition_no_valueerror(self):
+        # Regression for TASK-2036: an empty ``full_indices`` (fid) must not
+        # crash __apply_rate with
+        #   ValueError: zero-size array to reduction operation maximum ...
+        #
+        # This is the SEQUENTIAL reproduction of the parallel empty-partition
+        # defect: in a parallel run a rank's sub-domain can contain triangles
+        # that fall inside the operator polygon but are all GHOST triangles
+        # (owned by a neighbour rank). Then ``indices`` is non-empty (so
+        # __call__ does not early-return) while ``full_indices`` is empty, and
+        # ``local_rates[fid].max()`` reduces a zero-size array. The old
+        # ``except (TypeError, IndexError)`` did NOT catch ValueError, so every
+        # affected rank crashed at Time=0 and the run MPI-deadlocked.
+        #
+        # We reproduce that state on a single process by selecting a real
+        # triangle but flagging it as a ghost (tri_full_flag == 0) BEFORE the
+        # operator is constructed, so full_indices is empty. A *spatial* rate
+        # is required so ``local_rates`` is a numpy array (a scalar rate would
+        # instead hit the pre-existing TypeError fallback and never trigger the
+        # zero-size reduction).
+        a = [0.0, 0.0]
+        b = [0.0, 2.0]
+        c = [2.0, 0.0]
+        d = [0.0, 4.0]
+        e = [2.0, 2.0]
+        f = [4.0, 0.0]
+
+        points = [a, b, c, d, e, f]
+        #             bac,     bce,     ecf,     dbe
+        vertices = [[1,0,2], [1,2,4], [4,2,5], [3,1,4]]
+
+        domain = Domain(points, vertices)
+
+        # Flat surface with 1m of water
+        domain.set_quantity('elevation', 0.0)
+        domain.set_quantity('stage', 1.0)
+        domain.set_quantity('friction', 0.0)
+
+        Br = Reflective_boundary(domain)
+        domain.set_boundary({'exterior': Br})
+
+        factor = 10.0
+
+        def main_spatial_rate(x, y, t):
+            # x and y should be an n by 1 array
+            return x + y
+
+        # Select a real triangle (non-empty indices -> no early return) but mark
+        # it as a ghost, so full_indices is empty (the empty-partition state).
+        indices = [0]
+        domain.tri_full_flag[0] = 0
+
+        operator = Rate_operator(domain, rate=main_spatial_rate, factor=factor,
+                                 indices=indices, default_rate=0.0)
+
+        # Precondition: the state that used to crash.
+        assert len(operator.indices) == 1
+        assert operator.full_indices.size == 0
+
+        # Apply Operator: this must NOT raise (was ValueError before the fix).
+        domain.timestep = 2.0
+        try:
+            operator()
+        except ValueError as ex:
+            self.fail(
+                "Rate_operator raised ValueError on an empty partition "
+                "(regression TASK-2036): %s" % ex)
+
+        # With no full (non-ghost) triangles selected, the local rate stats are
+        # zeroed rather than crashing.
+        assert operator.local_max == 0.0
+        assert operator.local_min == 0.0
+
+        # full_indices (fid) drives the mass accounting, so a ghost-only
+        # selection contributes no mass to the tracked volume integral.
+        assert num.allclose(domain.fractional_step_volume_integral, 0.0)
+
+
 
 if __name__ == "__main__":
     suite = unittest.TestLoader().loadTestsFromTestCase(Test_rate_operators)

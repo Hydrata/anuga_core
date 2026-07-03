@@ -257,8 +257,19 @@ Parameters involving communication
 
 
         try:
-            self.local_max = (local_rates[fid].max()/timestep)
-            self.local_min = (local_rates[fid].min()/timestep)
+            _rates = local_rates[fid]
+            if isinstance(_rates, num.ndarray) and _rates.size == 0:
+                # Empty partition: this rank owns no full (non-ghost) triangles
+                # inside the operator polygon, so fid is empty. _rates.max()/.min()
+                # would raise ValueError (zero-size reduction), which the except
+                # below does NOT catch, deadlocking parallel evolve at Time=0.
+                # Backport of upstream develop's guard (rate_operators.py ~489-495).
+                # Fork-only fix; see TASK-2036.
+                self.local_max = 0.0
+                self.local_min = 0.0
+            else:
+                self.local_max = (_rates.max()/timestep)
+                self.local_min = (_rates.min()/timestep)
         except (TypeError, IndexError):
             self.local_max = local_rates/timestep
             self.local_min = local_rates/timestep
