@@ -1,0 +1,36 @@
+# CODEOWNERS — TASK-2297 fleet CI enforcement.
+#
+# Every path below is on the fleet's protected-path list: a change here can
+# redefine what a "required check" tests, or silently no-op it, without the
+# PR looking suspicious. The org ruleset's "Require review from Code Owners"
+# toggle means a PR touching any of these paths cannot merge without an
+# approving review from the listed owner — deliberately the HUMAN account,
+# never hydrata-ci-bot. See docs/fleet-enforcement/OPERATOR-CHECKLIST.md in
+# the Hydrata/deploy repo for the full governance bundle.
+#
+# NO branch-wide minimum-approval count is set anywhere in the ruleset — a
+# green PR touching NONE of the paths below needs zero human approvals and
+# auto-merges. Only PRs touching a path below require the human.
+#
+# anuga_core is a FORK of anuga-community/anuga_core (upstream remote) — per
+# CLAUDE.md this repo is surface-only for Hydrata changes (this CODEOWNERS
+# file + the canary sender workflow); core simulation code is never
+# blind-edited. Its canonical branch is `main`, not 5.x.
+#
+# This repo has no root setup.cfg/pytest.ini (deps + config live in
+# pyproject.toml + requirements.txt/docs/requirements.txt).
+#
+# Self-guard (last line): this file is on its own protected list. An agent
+# PR cannot repoint CODEOWNERS away from the human to remove the guard.
+
+# Whole .github/ tree: workflows (incl. the canary sender to run_anuga added
+# by TASK-2298), composite actions, CODEOWNERS itself.
+/.github/**                          @davekennewell
+
+# Unanchored `conftest.py` / `requirements*.txt` match every depth.
+conftest.py                          @davekennewell
+/pyproject.toml                      @davekennewell
+requirements*.txt                    @davekennewell
+
+# Self-guard — must stay the human, always, or the guard removes itself.
+/.github/CODEOWNERS                  @davekennewell
