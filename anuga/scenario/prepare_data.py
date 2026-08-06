@@ -1,5 +1,4 @@
 #!/usr/bin/python
-# -*- coding: utf-8 -*-
 """
 
 Setup base data for ANUGA run
@@ -37,7 +36,7 @@ class PrepareData(ProjectData):
         """Parse the input data then process it for ANUGA
 
             @param filename = configuration file (xls)
-            @param make_directories Create output directories for simulation           
+            @param make_directories Create output directories for simulation
             @param output_log filename to redirect stdout (inside output
                 directories)
 
@@ -63,7 +62,7 @@ class PrepareData(ProjectData):
         barrier()
 
     def define_output_directory_and_redirect_stdout(self,
-                                                    make_directories=True, 
+                                                    make_directories=True,
                                                     output_log=None):
         """Make the main output directory, and redirect stdout to a file there
 
@@ -87,6 +86,11 @@ class PrepareData(ProjectData):
             os.makedirs(self.output_dir, exist_ok=True)
 
             print('OUTPUT_DIRECTORY: ' + str(self.output_dir))
+
+        # Wait until rank 0 has created output_dir before any rank opens the log
+        # file inside it (otherwise non-zero ranks race ahead and crash with
+        # FileNotFoundError, deadlocking the run at the next barrier).
+        barrier()
 
         # Tee stdout to a file inside the output directory
         if output_log is not None:
@@ -234,12 +238,25 @@ class PrepareData(ProjectData):
                     + str(self.projection_information) \
                     + ' +datum=WGS84 +units=m +no_defs'
         elif isinstance(self.projection_information, str):
-            self.proj4string = self.projection_information
+            pi = self.projection_information.strip()
+            if pi.lower().startswith('epsg:'):
+                # An EPSG code, e.g. "EPSG:32755". Convert to a proj4 string so
+                # the downstream consumers (pyproj CRS.from_proj4 in Make_Geotif)
+                # accept it — they do not parse the bare "EPSG:NNNN" form.
+                import warnings
+                from pyproj import CRS
+                code = int(pi.split(':', 1)[1])
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore')  # silence to_proj4 lossy note
+                    self.proj4string = CRS.from_epsg(code).to_proj4()
+            else:
+                # Assume a full proj4 string
+                self.proj4string = pi
         else:
             msg = 'Invalid projection information ' + \
-                ' --  must be a proj4string, or an integer' + \
-                ' defining a UTM zone [positive for northern hemisphere,' + \
-                ' negative for southern hemisphere]'
+                ' --  must be a proj4string, an "EPSG:<code>" string, or an' + \
+                ' integer defining a UTM zone [positive for northern' + \
+                ' hemisphere, negative for southern hemisphere]'
             raise Exception(msg)
 
         # Set up directories etc
