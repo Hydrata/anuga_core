@@ -34,11 +34,18 @@ import sys
 _stdout = sys.stdout
 
 # ---------------------------------
-# Setup the tester from numpy
+# Convenience test runner — avoids numpy._pytesttester to prevent the
+# Python 3.14 / NumPy 2.x reload guard from firing when coverage.py
+# instruments submodules (coverage imports numpy before anuga does, so
+# importing numpy._pytesttester re-enters numpy/__init__.py).
 # ---------------------------------
-from numpy._pytesttester import PytestTester
-test = PytestTester(__name__)
-del PytestTester
+def test(*args, **kwargs):
+    """Run the anuga test suite via pytest.
+
+    Equivalent to: pytest --pyargs anuga
+    """
+    import pytest
+    return pytest.main(['--pyargs', 'anuga'] + list(args))
 
 #from anuga.__config__ import show as show_config
 
@@ -46,6 +53,9 @@ del PytestTester
 # Important basic classes
 # --------------------------------
 from anuga.shallow_water.shallow_water_domain import Domain
+from anuga.shallow_water.shallow_water_domain import (
+    set_gpu_offload, gpu_offload_enabled, gpu_offload_supported,
+    set_omp_num_threads, get_omp_num_threads)
 from anuga.abstract_2d_finite_volumes.quantity import Quantity
 from anuga.abstract_2d_finite_volumes.region import Region
 from anuga.geospatial_data.geospatial_data import Geospatial_data
@@ -129,7 +139,13 @@ from anuga.parallel.parallel_api import mpi_extra_options
 
 from anuga.parallel.parallel_api import sequential_distribute_dump
 from anuga.parallel.parallel_api import sequential_distribute_load
-        
+from anuga.parallel.partitioning import reorder_domain
+from anuga.parallel.parallel_api import sequential_mesh_dump
+from anuga.parallel.parallel_api import sequential_mesh_load
+from anuga.parallel.parallel_api import uniform_refine_domain
+from anuga.parallel.parallel_api import sequential_mesh_refine
+from anuga.parallel.parallel_api import create_parallel_mesh
+
 
 # -----------------------------
 # Checkpointing
@@ -153,6 +169,9 @@ from anuga.shallow_water.boundaries import \
                     Transmissive_n_momentum_zero_t_momentum_set_stage_boundary
 from anuga.shallow_water.boundaries import \
                     Flather_external_stage_zero_velocity_boundary
+from anuga.shallow_water.boundaries import \
+                    Absorbing_wave_boundary, \
+                    Characteristic_wave_boundary
 from anuga.abstract_2d_finite_volumes.generic_boundary_conditions import \
                     Compute_fluxes_boundary
 
@@ -240,6 +259,11 @@ from anuga.shallow_water.sww_interrogate import get_flow_through_cross_section
 from anuga.operators.kinematic_viscosity_operator import Kinematic_viscosity_operator
 
 from anuga.operators.rate_operators import Rate_operator
+from anuga.rain.raster_rate_operator import Raster_rate_operator, ARR_rate_operator
+from anuga.rain.arr_hub_rain import Arr_hub_rain, ARR_point_rainfall_patterns, Single_pattern
+from anuga.rain.arr_ifd_rain import Arr_ifd_rain, Arr_grd
+from anuga.operators.wind_stress_operator import Wind_stress_operator
+from anuga.operators.barometric_pressure import Barometric_pressure_operator
 from anuga.operators.set_friction_operators import Set_depth_friction_operator
 
 from anuga.operators.set_elevation_operator import Set_elevation_operator
@@ -313,6 +337,12 @@ from anuga.utilities.system_tools import get_revision_number
 from anuga.utilities.system_tools import get_revision_date
 from anuga.utilities.system_tools import memory_stats
 from anuga.utilities.system_tools import print_memory_stats
+from anuga.utilities.system_tools import quantity_memory_stats
+from anuga.utilities.system_tools import print_quantity_memory_stats
+from anuga.utilities.system_tools import domain_memory_stats
+from anuga.utilities.system_tools import print_domain_memory_stats
+from anuga.utilities.system_tools import domain_struct_stats
+from anuga.utilities.system_tools import print_domain_struct_stats
 from anuga.utilities.mem_time_equation import estimate_time_mem
 
 # -------------------------
@@ -342,6 +372,11 @@ __all__ = [
     'Domain',
     'Domain_plotter',
     'Generic_Domain',
+    'set_gpu_offload',
+    'gpu_offload_enabled',
+    'gpu_offload_supported',
+    'set_omp_num_threads',
+    'get_omp_num_threads',
     'Geo_reference',
     'Geospatial_data',
     'Mesh',
@@ -357,6 +392,8 @@ __all__ = [
     'Dirichlet_boundary',
     'Field_boundary',
     'File_boundary',
+    'Absorbing_wave_boundary',
+    'Characteristic_wave_boundary',
     'Flather_external_stage_zero_velocity_boundary',
     'Reflective_boundary',
     'Time_boundary',
@@ -372,6 +409,15 @@ __all__ = [
     'Flat_slice_erosion_operator',
     'Kinematic_viscosity_operator',
     'Rate_operator',
+    'Raster_rate_operator',
+    'ARR_rate_operator',
+    'Arr_hub_rain',
+    'ARR_point_rainfall_patterns',
+    'Single_pattern',
+    'Arr_ifd_rain',
+    'Arr_grd',
+    'Wind_stress_operator',
+    'Barometric_pressure_operator',
     'Sanddune_erosion_operator',
     'Set_depth_friction_operator',
     'Set_elevation',
@@ -460,6 +506,11 @@ __all__ = [
     'send',
     'sequential_distribute_dump',
     'sequential_distribute_load',
+    'sequential_mesh_dump',
+    'sequential_mesh_load',
+    'uniform_refine_domain',
+    'sequential_mesh_refine',
+    'create_parallel_mesh',
     # Model tools / polygon utilities
     'Create_culvert_bridge_Operator',
     'get_polygon_dictionary',
@@ -495,6 +546,12 @@ __all__ = [
     'get_version',
     'memory_stats',
     'print_memory_stats',
+    'quantity_memory_stats',
+    'print_quantity_memory_stats',
+    'domain_memory_stats',
+    'print_domain_memory_stats',
+    'domain_struct_stats',
+    'print_domain_struct_stats',
     'log',
     'set_logfile',
     'TeeStream',

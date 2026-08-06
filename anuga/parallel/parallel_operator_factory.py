@@ -56,7 +56,7 @@ def Inlet_operator(domain,
                    verbose = False):
 
     """Inlet Operator - add water to a domain via an inlet.
-    
+
     :param domain: Specify domain
     :param region: Apply Inlet flow over a region (which can be a Region, Polygon or line)
     :param Q: function(t) or scalar discharge (m^3/s)
@@ -66,8 +66,8 @@ def Inlet_operator(domain,
     :param description: Describe the Inlet_operator
     :param label: Give Inlet_operator a label (name)
     :param verbose: Provide verbose output
-    
-    
+
+
 
     Example:
 
@@ -160,7 +160,7 @@ def Boyd_box_operator(domain,
                        master_proc=0,
                        procs=None):
 
- 
+
     from anuga.utilities import parallel_abstraction as pypar
     # if procs is None:
     #     procs = list(range(0,pypar.size()))
@@ -277,6 +277,11 @@ def Boyd_box_operator(domain,
                                          inlet_procs = inlet_procs,
                                          enquiry_proc = enquiry_proc)
     else:
+        # This proc owns no part of the structure, so the constructor above is
+        # not called here. Still advance the shared counter so every rank stays
+        # in lockstep with the participating procs (which advance it in the
+        # operator constructor) — the factory is entered collectively.
+        Parallel_Structure_operator.counter += 1
         return None
 
 
@@ -441,6 +446,11 @@ def Boyd_pipe_operator(domain,
                                          inlet_procs = inlet_procs,
                                          enquiry_proc = enquiry_proc)
     else:
+        # This proc owns no part of the structure, so the constructor above is
+        # not called here. Still advance the shared counter so every rank stays
+        # in lockstep with the participating procs (which advance it in the
+        # operator constructor) — the factory is entered collectively.
+        Parallel_Structure_operator.counter += 1
         return None
 
 
@@ -626,6 +636,11 @@ def Weir_orifice_trapezoid_operator(domain,
                                          inlet_procs = inlet_procs,
                                          enquiry_proc = enquiry_proc)
     else:
+        # This proc owns no part of the structure, so the constructor above is
+        # not called here. Still advance the shared counter so every rank stays
+        # in lockstep with the participating procs (which advance it in the
+        # operator constructor) — the factory is entered collectively.
+        Parallel_Structure_operator.counter += 1
         return None
 
 
@@ -794,6 +809,11 @@ def Internal_boundary_operator(domain,
                                          inlet_procs = inlet_procs,
                                          enquiry_proc = enquiry_proc)
     else:
+        # This proc owns no part of the structure, so the constructor above is
+        # not called here. Still advance the shared counter so every rank stays
+        # in lockstep with the participating procs (which advance it in the
+        # operator constructor) — the factory is entered collectively.
+        Parallel_Structure_operator.counter += 1
         return None
 
 
@@ -907,7 +927,7 @@ def allocate_inlet_procs(domain, region, enquiry_point = None, master_proc = 0, 
             print("P%d has %d triangles in region %s" %(myid, len(tri_id), region.get_type()))
         else:
             print("P%d has %d triangles in region %s" %(myid, len(tri_id), region))
-            
+
 
     size = len(tri_id)
 

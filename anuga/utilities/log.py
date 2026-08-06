@@ -155,6 +155,7 @@ def set_logfile(path,
     """Enable logging to *path*, tee-ing all print() output as well.
 
     After this call:
+
     - sys.stdout is replaced with a TeeStream so every print() goes to
       both the terminal and *path*.
     - log.info() writes to both terminal and file.
@@ -330,7 +331,7 @@ def resource_usage(level=logging.INFO):
                 t = open(_proc_status)
                 v = t.read()
                 t.close()
-            except IOError:
+            except OSError:
                 return 0.0
             i = v.index(VmKey)
             v = v[i:].split(None, 3)
@@ -412,7 +413,7 @@ def resource_usage_timing(level=logging.INFO, prefix=''):
                 t = open(_proc_status)
                 v = t.read()
                 t.close()
-            except IOError:
+            except OSError:
                 return 0.0
             i = v.index(VmKey)
             v = v[i:].split(None, 3)
