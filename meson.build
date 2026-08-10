@@ -1,8 +1,25 @@
 # Meson build file for ANUGA core.
 # Version is derived from git tags via `git describe`.
-# Tag releases as `3.3.0`, `3.3.1`, etc. — no `v` prefix, matching the
-# existing tag convention. Between releases the version will look like
-# `3.3.0-4-gabcdef` (4 commits past the tag, short SHA).
+#
+# A RELEASE TAG MUST BE BARE-NUMERIC (`3.3.0`, `3.3.11`) — NEVER `v`-prefixed.
+# _git_version.py matches the base tag with `^(\d+\.\d+(?:\.\d+)?(?:[a-z]\w*)?)`,
+# which requires the tag to START WITH A DIGIT. A leading `v` fails that match
+# and falls through to the no-reachable-tag branch, so the version becomes
+# `0.0.0+g<describe>`. `git tag v3.3.11` is therefore a SILENT NO-OP: the tagger
+# sees a tag, every consumer still sees 0.0.0, and whatever the tag was meant to
+# fix stays broken.
+#
+# The previous wording here — "no `v` prefix, matching the existing tag
+# convention" — was ASPIRATIONAL, not descriptive, and that is the trap. The
+# existing convention DOES contain `v` tags, and they are the NEWEST ones
+# (v3.2.0-wheels.8, v3.2.0-wheels.9), while `git describe` always picks the
+# newest reachable tag. Measured on a deployed web box 2026-08-10:
+#     git describe --tags --dirty --always  ->  v3.2.0-wheels.9-1221-g7f1a4847
+#     anuga.__version__                     ->  0.0.0+gv3.2.0-wheels.9-1221-g7f1a4847
+# So the trap is armed right now, not merely possible.
+#
+# Between releases a correctly-tagged build looks like `3.3.0-4-gabcdef`
+# (4 commits past the tag, short SHA).
 #
 # Note: project() must be the first statement in meson.build.
 # The version is computed inline; git sha/date are fetched after.
