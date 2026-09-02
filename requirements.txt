@@ -15,7 +15,7 @@ matplotlib
 dill
 utm
 pyproj
-affine
+affine<3  # TASK-2883: affine 3.x warns (PendingDeprecationWarning) on the `Affine * Affine` rasterio still uses internally; hydrata pins 2.4.0
 openpyxl
 pybind11
 pymetis
