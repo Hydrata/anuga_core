@@ -5,6 +5,36 @@ or require caution when working in specific areas.
 
 ---
 
+## Structures
+
+### A culvert in still water amplifies roundoff (not a mode-1 vs mode-2 problem)
+
+A Boyd structure whose inlets sit in near-still water is an unstable configuration: the
+operator reads the enquiry cells and writes the inlet cells, and the two are close enough
+to close a feedback loop. With no head across the structure the discharge is decided by
+roundoff, and the perturbation grows exponentially — from 1 ULP to ~1e-2 m of stage in a
+few seconds on a 200 m x 50 m test domain.
+
+**It is not a GPU port problem.** Perturbing a single enquiry cell by 1e-15 in mode 1
+diverges from unperturbed mode 1 exactly as fast as mode 2 does (measured: 5.4e-06 at
+t=0.25 s, 5.3e-03 at t=1 s — the same as |mode1 - mode2| over the same run). A CPU/GPU
+comparison over such a configuration measures the instability, not the port.
+
+Consequences when writing tests:
+
+* A GPU-vs-CPU culvert test needs a **genuine driving head**, so the discharge is
+  deterministic and dominant. `Test_GPU_LargeInlet` in `test_DE_gpu_omp.py` does this
+  (ponded upstream, low downstream) and then agrees to ~1e-14. An earlier version of it
+  used still water and was hostage to this effect.
+* A well-balancedness test (issue #229) must be kept **short** (~1 s) or use enquiry
+  points well clear of the inlets, or the instability grows into the measurement.
+
+With the #229 fix (stage leveling) the old uniform-depth perturbation is gone, so this
+effect is no longer masked — it is now the dominant behaviour of a structure in still
+water, and the constraints above apply to any test touching one.
+
+---
+
 ## Build
 
 ### Building with GPU offloading (NVIDIA HPC SDK / nvc)
@@ -388,6 +418,39 @@ by default.
 
 `test_kinematic_viscosity_operator.py` runs 4 tests that take 2–5 seconds each.
 These are marked `@pytest.mark.slow` at module level.
+
+---
+
+## Meshes
+
+### A couple of sliver triangles can pin the global timestep (towradgi, 2026-08-11)
+
+`run_small_towradgi.py` at the default `scale=1` (256688 triangles) reports a
+`delta t` that looks suspiciously frozen — `delta t in [0.10136885, 0.10136885]`,
+identical to 8 decimal places across 1184 steps, drifting only in the 6th decimal
+between yieldsteps. It is **not** a fixed timestep, a stale reduction, or a GPU
+artifact (the same numbers come out on cc75/cc89/cc120 and on the CPU build).
+
+Reconstructing the per-cell CFL limit from the SWW centroid values identifies the
+culprit: **cell 72200, the smallest triangle in the mesh** (area 1.457 m²,
+inradius 0.425 m vs a 1.99 m median), sitting in a **static pond** — h = 0.923 m,
+|v| = 0.000 m/s, unchanged from t=0 to t=600. It binds `min(r/(|v|+√(gh)))` at
+every step, so the global minimum barely moves while the flood evolves elsewhere.
+The tightest dozen cells are all slivers clustered in a ~50 m patch around easting
+307664–307713, northing 6193697–6193735, where `Model/Creeks/creeks.csv` and
+`Model/Bdy/CreekBanks.csv` nearly coincide.
+
+The cost is real: relaxing the worst 5 cells would raise `dt` from 0.141 to 0.231
+in the reconstruction (~1.6× fewer steps for the whole run).
+
+Confirmed by refinement — at `-sc 0.1` (1636238 triangles) those regions are
+regenerated without the pathological slivers and `dt` **rises** to ~0.1176 (the
+opposite of what resolution alone does) and becomes genuinely adaptive again
+(`delta t in [0.11755643, 0.11783941]`, min ≠ max).
+
+**Lesson:** a `delta t` that is constant to many decimal places is a signal to go
+looking for a mesh artifact, not evidence of a well-behaved solver. A handful of
+slivers in still water can tax every timestep of a run.
 
 ---
 

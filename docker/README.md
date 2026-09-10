@@ -164,12 +164,33 @@ docker/aws_run_gpu.sh --region ap-southeast-2 \
   --output s3://my-bucket/anuga/out --command "python run.py" --dry-run
 ```
 
+**Use `--spot` for anything repeatable.** It tries the spot market first across
+every instance type and AZ, then falls back to on-demand automatically, so the
+worst case is the price you would have paid anyway. Spot is roughly a third of
+on-demand. The launch output labels each attempt `[spot]` or `[on-demand]` and
+the success line says which market you actually got.
+
+Note what "safe to interrupt" does and does not mean here: the entrypoint
+uploads results to S3 **after the command finishes**, so a spot reclaim loses
+that run entirely — there is no checkpointing. That is fine for short jobs
+(10–40 min) where re-running is cheap, and a bad trade for a long production
+run unless your own script checkpoints.
+
 Defaults to `g5.2xlarge` (1× A10G / cc86, 8 vCPU, 32 GB — a good balance since
 mesh-gen + DEM fitting are CPU-bound). Flags: `--dry-run`, `--instance`, `--spot`,
 `--keep` (don't self-terminate, for debugging), `--ami`, `--instance-profile`,
 `--region`, `--disk`. Prereqs: `awscli` configured, an S3 bucket, and a one-time
 **GPU vCPU service-quota increase** (new accounts start at 0 for G/P families).
 Each user runs this in **their own AWS account and pays for their own usage**.
+
+**Image source:** by default it pulls the public GHCR image
+(`ghcr.io/anuga-community/anuga:develop-gpu`). Add **`--ecr`** to use the private
+in-region ECR image `…dkr.ecr.<region>.amazonaws.com/anuga:gpu-slim` instead —
+the ~459 MB slim build, so the instance's cold-start pull drops from ~16.7 GB to
+~0.5 GB. The script builds the URI from your account + region, grants the
+instance role `AmazonEC2ContainerRegistryReadOnly`, and logs the instance in to
+ECR before pulling. Override the repo:tag with `--ecr-repo anuga:<tag>`, or pass
+a full ECR URI via `--image …` (auto-detected). Push the image first (below).
 
 **New to AWS?** Follow [`AWS_SETUP.md`](AWS_SETUP.md) — account, budget alerts,
 the quota increase, region + bucket, then dry-run and launch.
@@ -188,14 +209,15 @@ account's ECR) and use Batch array jobs:
 aws ecr create-repository --repository-name anuga || true
 aws ecr get-login-password | docker login --username AWS --password-stdin \
   "$AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com"
-docker tag anuga:gpu "$AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/anuga:gpu"
-docker push "$AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/anuga:gpu"
+docker tag anuga:gpu-slim "$AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/anuga:gpu-slim"
+docker push "$AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/anuga:gpu-slim"
 ```
 
 ### AWS Batch (GPU)
 
-1. **Compute environment** — EC2 with GPU instance types (`g4dn`/`g5`/`g6`/`p4d`/`p5`;
-   `p3`/V100 is not covered by the default image — see GPU_ARCH note in Dockerfile.gpu)
+1. **Compute environment** — EC2 with GPU instance types (`g4dn`/`g5`/`g6`/`p4d`/`p5`,
+   and `p3`/V100 — the default image now spans cc70–cc120, see the GPU_ARCH note
+   in Dockerfile.gpu)
    using the **ECS GPU-optimized AMI** (driver + `nvidia-container-runtime`
    preinstalled). Spot is fine for interruptible runs.
 2. **Job definition** — key fields:
@@ -240,11 +262,16 @@ docker push "$AWS_ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/anuga:gpu"
   ```
   (The images set `HOME=/tmp` so `--user` runs have a writable config dir. With
   compose, `export UID GID` first — see the header of docker-compose.yml.)
-- **Image size:** the GPU image's NVHPC base is ~10–15 GB. A slimmer multi-stage
-  runtime (CUDA-runtime base + copied NVHPC redistributable libs + the venv) is
-  drafted in `Dockerfile.gpu.slim` (**experimental** — needs local build-testing
-  to confirm the runtime-lib set). It should drop the image to a few GB, cutting
-  storage and AWS cold-start pull time.
+- **Image size:** the devel-based GPU image (`Dockerfile.gpu`) is ~50 GB
+  (~16.7 GB compressed to pull). `Dockerfile.gpu.slim` is a multi-stage build
+  (CUDA **-base** image + copied NVHPC redistributable libs + the venv) that is
+  **~2.15 GB (459 MB compressed)** — ~37x smaller to pull, slashing storage and
+  AWS cold-start time. Validated on the cc120 laptop: `import anuga` and a real
+  GPU-offload evolve both work. OpenMP-target offload needs only `libnvomp`
+  (from the redist copy) plus the host driver (`--gpus`), not `libcudart`, so
+  the CUDA `-base` image is enough. Build with
+  `docker build -f docker/Dockerfile.gpu.slim -t anuga:gpu-slim .`. Further
+  shrink is possible by trimming the redist libs to the `ldd` set.
 - **Version string:** `.git` is excluded from the build context, so a
   source-built GPU image reports `0.0.0+unknown` for `anuga.__version__`
   (cosmetic; the code is the checkout's).
