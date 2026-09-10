@@ -4,7 +4,16 @@ requires = [
     "meson-python",
     "meson",
     "ninja",
-    "Cython",
+    # TASK-2863: was a bare, unbounded "Cython" — which is exactly what let
+    # Cython 3.3.0 (released 2026-08-22) break every build-isolated install
+    # with zero change on our side: it rejected this package's dict-view ->
+    # `cdef list` assignments in sparse_matrix_ext.pyx (fixed on this branch;
+    # see the commit adjacent to this one). An unbounded build dependency has
+    # no owner and no warning before it floats onto a breaking release, so
+    # bound the next major away until someone has deliberately verified it.
+    # Upstream anuga-community/anuga_core carries the same bare "Cython" —
+    # this is a candidate to send there too so the delta stops recurring.
+    "Cython<4",
     "pybind11",
     "numpy",
     "libpython; sys_platform == 'win32'",
