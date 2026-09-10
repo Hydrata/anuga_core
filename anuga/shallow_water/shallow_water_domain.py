@@ -1473,6 +1473,35 @@ class Domain(Generic_Domain):
             self.gpu_interface.sync_to_device()
 
 
+    def _sync_riverwall_to_device(self) -> None:
+        """Push pending host-side riverwall changes out to the device (mode 2).
+
+        The riverwall crest elevations and hydraulic properties are mapped to the
+        device once, when the mode-2 interface is built, and are never written
+        there. A host-side change — RiverWall.set_elevation() to operate a gate,
+        say — therefore has no effect on the device until it is pushed across,
+        which is what this does.
+
+        Called by evolve() at yieldstep boundaries only: that is where a script
+        can make such a change (in the body of the evolve loop) and where the
+        host and device are already in step, so the crest never changes part-way
+        through a timestep or between RK substeps.
+        """
+
+        riverwall_data = getattr(self, 'riverwallData', None)
+        if riverwall_data is None:
+            return
+        if not getattr(riverwall_data, 'device_data_dirty', False):
+            return
+
+        if (self.multiprocessor_mode == MULTIPROCESSOR_GPU
+                and getattr(self, 'gpu_interface', None) is not None):
+            self.gpu_interface.sync_riverwall_to_device()
+
+        # Cleared unconditionally: on the CPU paths the kernels read the host
+        # arrays directly, and a later mode-2 setup maps their current values.
+        riverwall_data.device_data_dirty = False
+
     def set_timezone(self, tz: str | ZoneInfoType | None = None) -> None:
         """Set timezone for domain
 
@@ -2724,6 +2753,39 @@ class Domain(Generic_Domain):
                 "Wind_stress_operator, Barometric_pressure_operator.",
                 stacklevel=2)
 
+    def _warn_mode2_degenerate_protection(self):
+        """Warn (once) that mode 2 does not run the degenerate-timestep protection.
+
+        `apply_protection_against_isolated_degenerate_timesteps()` damps the
+        momentum of triangles whose timestep is anomalously small. It is reached
+        only from `update_timestep()`, and mode 2 ('unified') never gets there:
+        the C step loops return before it, and the Python-orchestrated GPU loops
+        that do call it find a host `max_speed` that the device never syncs back
+        (the flux kernel writes the device copy), so the routine's own
+        `max(max_speed) < 10` guard returns immediately.
+
+        The feature is default-off (`config.protect_against_isolated_degenerate_timesteps`),
+        so the sharp edge is a user who turns it on under GPU offload and gets no
+        protection AND no warning. This makes it visible, as mode 2 already does
+        for unsupported forcing terms.
+        """
+        if getattr(self, '_warned_mode2_degenerate_protection', False):
+            return
+        if not self.protect_against_isolated_degenerate_timesteps:
+            return
+        if self.multiprocessor_mode != MULTIPROCESSOR_GPU:
+            return
+
+        self._warned_mode2_degenerate_protection = True
+        import warnings
+        warnings.warn(
+            "protect_against_isolated_degenerate_timesteps is True, but "
+            "multiprocessor_mode=2 ('unified') does not implement it: no "
+            "isolated-degenerate-triangle damping will be applied. Use "
+            "domain.set_multiprocessor_mode(1) ('legacy') if you need this "
+            "protection.",
+            stacklevel=2)
+
     def set_boundary(self, boundary_map):
         """Associate boundary objects with tagged segments (see base class).
 
@@ -2920,6 +2982,15 @@ class Domain(Generic_Domain):
         if self.protect_against_isolated_degenerate_timesteps is False:
             return
 
+        # Not implemented in mode 2: max_speed is computed on the device and
+        # never synced back, so the histogram below would be built from a stale
+        # host array. Say so and skip, rather than silently damping nothing (or
+        # damping on the strength of stale values) — see
+        # _warn_mode2_degenerate_protection().
+        if self.multiprocessor_mode == MULTIPROCESSOR_GPU:
+            self._warn_mode2_degenerate_protection()
+            return
+
         # FIXME (Ole): Make this configurable
         if num.max(self.max_speed) < 10.0:
             return
@@ -2983,10 +3054,22 @@ class Domain(Generic_Domain):
         # added rather than the cell count: only when it is a large enough fraction
         # of the total water volume (threshold via
         # set_negative_volume_warning_fraction; 0.0 warns on any added volume).
-        # The absolute floor rejects pure floating-point noise: a nearly-dry
-        # domain can clamp femtolitre deficits that are a large *fraction* of an
-        # essentially-zero total volume but are physically meaningless.
-        if num_negative_ids > 0 and negative_volume > _negative_volume_noise_floor:
+        # The absolute floor rejects pure floating-point noise.
+        #
+        # SERIAL ONLY. "Loss of conservation" is a GLOBAL property, so the ratio
+        # must use the whole-domain volume. In parallel this rank sees only its
+        # partition: a nearly-dry sub-domain holds femtolitre-scale noise, so a
+        # local ratio warns spuriously. Getting the global volume would need a
+        # per-substep collective inside this hot function, which is not viable —
+        # update_conserved_quantities is not called in guaranteed lock-step
+        # across ranks (structure operators, euler vs rk2, small/empty
+        # partitions), so any collective here deadlocks (two separate hangs were
+        # traced to exactly this). In parallel, use the periodic global
+        # report_water_volume_statistics() (e.g. the TOML runner's per-yieldstep
+        # water balance) to check conservation instead.
+        from anuga import numprocs
+        if numprocs == 1 and num_negative_ids > 0 \
+                and negative_volume > _negative_volume_noise_floor:
             total_volume = self.get_water_volume()
             if total_volume > 0.0 and \
                     negative_volume > self.negative_volume_warning_fraction * total_volume:
@@ -3243,6 +3326,11 @@ class Domain(Generic_Domain):
         if self.multiprocessor_mode == MULTIPROCESSOR_GPU and self.gpu_interface is not None:
             self._has_cpu_only_fractional_operators()
             self._warn_unsupported_mode2_forcing()
+            self._warn_mode2_degenerate_protection()
+
+        # Any riverwall change made before evolve() (or between two evolve()
+        # calls) reaches the device here, before the first step.
+        self._sync_riverwall_to_device()
 
         #nvtx marker
         nvtxRangePush('_evolve_base')
@@ -3289,6 +3377,11 @@ class Domain(Generic_Domain):
             # Pass control on to outer loop for more specific actions
             yield(t)
 
+            # The outer loop may have operated a riverwall (set_elevation() and
+            # friends). In mode 2 the device copy is stale until pushed; do it
+            # here so the change takes effect from the next timestep on.
+            self._sync_riverwall_to_device()
+
             self.yieldstep_counter += 1
 
         #nvtx marker
@@ -3301,6 +3394,22 @@ class Domain(Generic_Domain):
         """
 
         nvtxRangePush('SWW_file')
+
+        # Erosion operators promote elevation to time-varying storage when they
+        # are created. If it has since been reset to static (flag != 2), the
+        # eroded bed will not be recorded — warn. Skip when the user
+        # deliberately chose static (they were already told; e.g. the TOML
+        # scenario warns at parse time).
+        if getattr(self, '_erosion_present', False) \
+                and self.quantities_to_be_stored.get('elevation') != 2 \
+                and not getattr(self, '_elevation_static_by_user', False):
+            import warnings
+            warnings.warn(
+                'An erosion operator is active but elevation is stored '
+                'statically, so the eroded bed will not appear in the SWW '
+                "output. Set domain.quantities_to_be_stored['elevation'] = 2 "
+                'to store it time-varying.',
+                stacklevel=2)
 
         # Initialise writer
         self.writer = SWW_file(self)
@@ -4022,7 +4131,7 @@ class Domain(Generic_Domain):
             sync_boundary_values(gpu_dom)
 
         # Compute fluxes
-        self.flux_timestep = compute_fluxes_gpu(gpu_dom)
+        self.flux_timestep = compute_fluxes_gpu(gpu_dom, 0, 2)
 
         # Forcing terms
         self.compute_forcing_terms()
@@ -4098,7 +4207,7 @@ class Domain(Generic_Domain):
             sync_boundary_values(gpu_dom)
 
         # Compute fluxes (ignore timestep from second step)
-        compute_fluxes_gpu(gpu_dom)
+        compute_fluxes_gpu(gpu_dom, 1, 2)
 
         # Forcing terms
         self.compute_forcing_terms()
@@ -4659,7 +4768,7 @@ class Domain(Generic_Domain):
         extrapolate_second_order_gpu(gpu_dom)
         _eval_boundaries()
 
-        self.flux_timestep = compute_fluxes_gpu(gpu_dom)
+        self.flux_timestep = compute_fluxes_gpu(gpu_dom, 0, 3)
 
         # Forcing terms
         self.compute_forcing_terms()
@@ -4682,7 +4791,7 @@ class Domain(Generic_Domain):
         extrapolate_second_order_gpu(gpu_dom)
         _eval_boundaries()
 
-        compute_fluxes_gpu(gpu_dom)
+        compute_fluxes_gpu(gpu_dom, 1, 3)
         self.compute_forcing_terms()
         update_conserved_quantities_gpu(gpu_dom, self.timestep)
 
@@ -4702,7 +4811,7 @@ class Domain(Generic_Domain):
         extrapolate_second_order_gpu(gpu_dom)
         _eval_boundaries()
 
-        compute_fluxes_gpu(gpu_dom)
+        compute_fluxes_gpu(gpu_dom, 2, 3)
         self.compute_forcing_terms()
         update_conserved_quantities_gpu(gpu_dom, self.timestep)
 

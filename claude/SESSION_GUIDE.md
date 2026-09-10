@@ -449,7 +449,315 @@ Findings:
 
 ---
 
-## Recent session summaries (sessions 21–52)
+## Recent session summaries (sessions 21–57)
+
+**Session 57 (2026-08-21/23):** **4.0.0 release engineering** — Phases 1 and 2
+complete, RC published, and three separate upstream breakages absorbed along the
+way. None of the four defects found were in ANUGA's solver.
+
+- **Review + release plan.** An engineering review of the whole repo (published
+  as an Artifact) produced `claude/RELEASE_PLAN_4.0.0.md`: go straight to 4.0.0,
+  no 3.4 bridge, because `main` and `develop` already share the packaging
+  foundation and develop still defaults to `legacy` compute mode — so there is
+  no behavioural cliff. The scary parts of "v4" (mode-2 default flip, forcing
+  removal) are explicitly deferred to 4.1.
+- **Phase 1: nine verification gates, all green.** Full suite both builds
+  (2937 / 2948), unified-mode one-process (2947), GPU isolated runners on TWO
+  architectures (local RTX 5070 cc120 and cloud g6.xlarge Ada L4 — identical
+  counts), validation suite (120 passed), Towradgi mode-1 vs mode-2, MPI,
+  wheels, fresh conda 3.10/3.14, docs.
+- **Phase 2: notes, guide, citation, RC.** `RELEASE_NOTES.md` and
+  `UPGRADING_TO_4.0.md` written and approved; `CITATION.cff` was stale at
+  version 3.1.9 / 2022-06-26 with a 2022 commit pin. `4.0.0rc1` published to
+  **TestPyPI** — 21 artifacts, cp310–cp314, Linux/macOS(arm64+x86_64)/Windows —
+  built via the `ANUGA_VERSION` override so **no rc tag** was needed on develop.
+  Verified installable in a clean venv by the exact command the announcement
+  gives people.
+
+**Four defects found, none in the solver:**
+
+1. **`run_gpu_tests_isolated.sh` swallowed failures** — `rc=$?` after a pipeline
+   read `tail`'s status, so every failing class reported "ok" and the script
+   exited 0. This is why several "all GPU classes green" claims earlier were
+   worthless.
+2. **`anuga_run_isolated_tests` crashed against an installed anuga** — all 106
+   tests CRASH in a container. pytest emits node ids relative to ITS rootdir
+   (the common ancestor of the targets); the runner resolved them against its
+   own cwd-derived ROOTDIR. In a checkout the two coincide, which is why it was
+   invisible locally. Now resolves against target-derived base dirs and **fails
+   loudly** when an id resolves to no file.
+3. **gcc/nvc disagree on line-region triangle selection** (#231) — a culvert
+   exchange line lying exactly on mesh edges selected 32 vs 54 triangles for the
+   same script. Test made geometry-robust.
+4. **Concurrent writes to one SWW silently interleave** (#232) — `domain_name`
+   is hardcoded in the case-study scripts, so two runs corrupt each other's
+   output with a non-monotonic time axis and plausible-looking numbers. Cost a
+   full invalid gate-5 result. Found via the frame-index pattern (writer A at
+   0,2,4-8; B at 1,3).
+
+**Three upstream breakages, none our doing:**
+
+- **conda-forge mingw build 11** broke every Windows job for two days: binaries
+  compile and then abort in the stack protector (`__stack_chk_fail` on an empty
+  `main`). Took five CI cycles to converge because the ground kept moving — the
+  compilers were rebuilt mid-investigation, so a sysroot-only pin worked for a
+  day and then failed. **Only one self-consistent set exists**: gcc/gxx_impl
+  build 2 + sysroot chain build 10 + `libwinpthread` build 10 + `libstdcxx`
+  build 2. Pinning one half looks like it works (wheels build) and then every
+  test process dies silently at exit 127, because libwinpthread bites at RUN
+  time. Removal tracked in **#235**; upstream is
+  conda-forge/m2w64-sysroot-feedstock#23, where our reproduction is cited.
+- **Cython 3.3.0** broke all 20 wheel builds: `dict.items()` can no longer be
+  assigned to a `cdef list`. `sparse_matrix_ext.pyx` had one such assignment
+  that was **never used**, plus a second on the next line that would have failed
+  next. Local builds stayed green on Cython 3.2.5.
+- **Branch protection** turned out to be enforced by *rulesets*, not classic
+  protection — removing the classic setting did nothing, which only surfaced
+  when a merge was refused.
+
+**Also:** #237 (bare `ModuleNotFoundError` from an unbuilt tree) fixed;
+#238 filed (make the meshpy import lazy — Triangle's licence makes it a hard
+non-free dependency at import time); `claude/PPA_FEASIBILITY.md` written for
+#25 (Ubuntu has every dependency except meshpy and pymetis; recommend against a
+PPA since pip wheels, conda-forge and Docker now cover the original ask).
+
+**RESUME STATE (as of 2026-08-23):**
+- `develop` == `origin/develop` == `stoiver/develop` at `743b6369`. All CI green.
+- **Waiting on**: RC soak feedback from Ole, Rudy, Petar, David and Jorge; and
+  conda-forge/admin-requests#2297 landing so the Windows pin (#235) can go.
+- **Petar's verdict on Towradgi can reopen the #229 physics decision**, not just
+  the wording — it is his case study and it is the evidence behind the release
+  notes' numbers. Reproduction recipe kept in
+  `claude/RELEASE_4.0.0rc1_REPLY_PETAR.md`.
+- **RC drift** (commits after 4.0.0rc1, tracked in the release plan): #237's
+  import message and the Cython 3.3.0 fix. Both build/import level; neither can
+  change results, so the soak stands. Anything that COULD change results means
+  rebuilding the RC, not adding a row.
+- Phase 3 is short and scripted in `claude/RELEASE_PLAN_4.0.0.md`: release PR to
+  `main`, set `date-released` in CITATION.cff, annotated bare-version tag, then
+  the GitHub Release triggers PyPI / Docker / the conda-forge bot.
+- Open from this session: #231, #232, #235, #238. Closed: #189, #214, #224,
+  #225, #229, #237.
+
+**Session 56 (2026-08-20/21):** **Issue triage sweep → five issues closed**, one
+of them the long-standing well-balancedness defect in every structure operator.
+
+- **Triage of all 24 open issues** against the code. #214 (TOML interior holes +
+  erosion) was already implemented on develop — closed citing the commits. #25
+  got a comment pointing at the docker/ images + GHCR workflow (PPA half stays
+  open). #143 awaits samcom12's re-run. The rest confirmed still open.
+- **#224 riverwall crest → device (PR #227, merged).** `set_elevation()` wrote
+  only the host array; mode-2 kernels kept the crest they were mapped with — a
+  gate operated mid-run was silently ignored. New `gpu_sync_riverwall_to_device()`
+  pushed by `evolve()` **at yieldstep boundaries only** (the user asked for
+  that timing): once before the loop, once on resuming from each yield, gated by
+  a `device_data_dirty` flag set by the three RiverWall setters. Also warns if
+  `create_riverwalls()` runs after the interface exists (fresh arrays — the
+  device still points at the old ones; not fixable by a push).
+- **#189 degenerate-timestep protection (PR #228, merged).** Mode 2 never runs
+  it: the C loops return before `update_timestep()`, and the Python-orchestrated
+  GPU loops reach it but the stale host `max_speed` (device never syncs it back)
+  makes its `<10` guard return — absent on every path, one of them by accident.
+  Option 1 from the issue: warn once per domain, and the routine itself now
+  warns-and-returns in mode 2 so the absence is a decision.
+- **#225 MAX_INLET_TRIANGLES (PR #228, merged).** The 64-triangle inlet cap was
+  fixed arrays in `culvert_indices` — host-side staging only; the device side
+  was already dynamic. Now heap arrays sized by the real count, cap deleted.
+  `Test_GPU_LargeInlet`: 79 triangles/inlet, modes agree ~1e-14.
+- **#229 structure well-balancedness (PR #230, merged) — took two attempts.**
+  Filed first: `Inlet.set_depths()` writes a uniform DEPTH, which on a sloping
+  bed tilts a lake at rest by half the inlet's bed range per step at zero Q.
+  **Attempt 1 (surface shift, e899973f) reverted** (f4e2ab11): broke the pipe
+  culvert on all 15 CI jobs — flattening is the smoothing the culvert feedback
+  loop needs; a dry receiving inlet grew a ridge and Q stalled to 0.
+  **Attempt 2 (stage leveling): water finds its level** — fills raise the
+  lowest stages, drawdowns lower the highest, clamped at the bed, bisection (no
+  sort, same loop in numpy and one GPU team). Flat bed reproduces the old write
+  **exactly**, so the pipe test passes by construction; zero transfer is
+  bit-exact (lake at rest 6.8e-02 → 3.7e-09). Second trap: one momentum value
+  written uniformly over leveled depths gave a near-dry cell 1.7e6 m/s and
+  collapsed the timestep — `set_average_momenta()` now writes it depth-weighted
+  (uniform VELOCITY). Full details in DECISIONS.md.
+- **`run_gpu_tests_isolated.sh` lied (8662239c).** `rc=$?` after a pipeline read
+  `tail`'s status — every failing class reported "ok", which is how attempt 1's
+  failure reached CI instead of this desk. Fixed + verified against a deliberate
+  failure. Lesson applied: attempt 2 was validated with the full suite exactly
+  as CI runs it (2937 passed), not the fast subset.
+- **New gotcha (KNOWN_ISSUES):** a structure in near-still water amplifies
+  roundoff exponentially (1 ULP → ~1e-2 m stage in seconds) via the
+  enquiry↔inlet feedback. NOT mode-related — a 1-ULP mode-1 perturbation
+  diverges as fast as mode 2. Un-masked now #229 is fixed: CPU/GPU culvert
+  comparisons need a driven head; well-balancedness tests stay short.
+- **Process:** merges to `develop` don't fire `Fixes #N` (default branch is
+  `main`) — #189/#224/#225/#229 all closed by hand with commit citations.
+
+*(superseded by session 57's resume state above)*
+
+**RESUME STATE (as of 2026-08-21):**
+- `develop` == `origin/develop` == `stoiver/develop` at `7f98999a` (merge of
+  PR #230). Topic branch `fix/229-well-balanced-inlets` deleted after merge.
+- Merged this session: PRs #227, #228, #230. Closed: issues #189, #214, #224,
+  #225, #229.
+- **Still open from the triage:** #223 (gpu-aware MPI is host-staged), #170
+  (per-substep boundaries in the C RK loop), #190 (blocked on draft PR #188),
+  #143 (awaiting samcom12 re-run), #77, #141, and the older wishlist items.
+- Uncommitted, deliberately: `towradgi.toml` arithmetic demo. Untracked:
+  `sandpit/culvert_issue/` (48 MB reporter model — do not commit),
+  `docs/source/reference/generated/`.
+
+**Session 55 (2026-08-13):** A regression of our own making, the culvert crash,
+and hardening the installers so neither can happen quietly again.
+
+- **gpu culvert stack overflow (#217, PR merged via #218).** 101 culverts wedged
+  at `Time = 0` then segfaulted on a NaN-bit-pattern pointer.
+  `gpu_culverts_apply_all()` sized its per-step buffers as fixed stack arrays of
+  `MAX_CULVERTS` (64) but looped over `num_culverts`: 24240 bytes into 15360, on
+  every timestep. `MAX_CULVERTS` is only the *initial* capacity — registration
+  grows by doubling. Buffers moved to the heap. Regression test
+  `Test_GPU_ManyCulverts` (80 culverts) hangs on the old code, passes in 1.3 s.
+- **`-Dgpu_arch` never selected anything (PR #220).** nvc device-links at the
+  LINK step and `gpu_link_args` was empty, so it built for the build host's GPU,
+  or — with no GPU visible, as in a container — every arch the CUDA supports.
+  The "multi-arch" images were portable *by accident*. Fixed by repeating
+  `-gpu=<arch>` at link.
+- **…which then broke Petar's RTX 30xx (PR #221).** With the flag working,
+  `install_anuga_nvc.sh`'s hardcoded `GPU_ARCH=cc120` produced sm_120-only
+  builds that compile cleanly and crash at every kernel launch. Now detected
+  from `nvidia-smi`.
+- **Compatibility is ONE-DIRECTIONAL** (measured, not assumed): nvc embeds PTX
+  and the driver JIT-compiles it *forward*, so a cc86 build runs on sm_120;
+  a cc120 build can never run on sm_86. JIT costs +0.38 s at first launch, no
+  throughput difference — matters where the cache is cold (isolated runner,
+  containers, MPI ranks). `cc70`/V100 needs a CUDA ≤ 12.x in the SDK; CUDA 13
+  dropped Volta.
+- **Installers (PR #222, open).** New `tools/anuga_build_report.py` (also for bug
+  reports) prints version/install type/GPU build/MPI/SM archs/GPU present, and
+  `--check` fails a build that cannot run here. Both scripts log a transcript.
+  `GPU_ARCH=auto` probes what the toolchain can build rather than assuming (nvc
+  on Gadi is a module wrapper with no SDK layout beneath it). Explicit arch lists
+  are never silently narrowed. `install_miniforge.sh` is re-runnable, detects a
+  GPU and *advises* (does not switch compilers — the nvc host fallback is
+  several times slower than gcc), `GPU=1` opts in. GPU tests are skipped when no
+  GPU is visible (they were running on a Gadi login node).
+- **`anuga:gpu-mpi` image** (2.69 GB, in ECR): HPC-X OpenMPI 4.1.7a1, CUDA-aware,
+  mpi4py + pymetis, `-Dgpu_aware_mpi=true`. Four container gotchas solved and
+  documented: `OMPI_CC=gcc`, `OPAL_PREFIX`, `OMPI_MCA_ess_singleton_isolated=1`
+  (singleton `MPI_Init` hangs — bites *serial* runs, since `import anuga` pulls
+  in mpi4py), and container transports (`pml=ob1, btl=self,smcuda,tcp`).
+- **`.dockerignore` excludes `docker/Dockerfile*`** — they landed in the
+  `COPY . .` layer, so a one-line Dockerfile edit invalidated the ~45 min ANUGA
+  compile. Now 2.6 s with 14 layers cached.
+- **Issue #223 (open):** `-Dgpu_aware_mpi=true` is not GPU-aware — `gpu_halo.c`
+  stages every halo through host memory in *both* paths (UCX `uct_mm` SIGSEGVs
+  on device pointers). Measure halo cost before implementing real GPUDirect.
+
+*(Session 56's resume state below is superseded by session 57's above; and
+session 55's by session 56's — PR #222
+merged, and the issue landscape has moved.)*
+
+**RESUME STATE (as of 2026-08-13):**
+- `develop` = `stoiver/develop`, **8 commits ahead of origin/develop**, all in
+  **PR #222** (installer hardening). CI was green on `5d53d602`; later commits
+  only touch shell scripts, which CI does not exercise.
+- Merged this session: #218, #220, #221. Closed: #219 (superseded — its fix rode
+  in with #218), issue #217.
+- **Open: PR #222, issue #223.**
+- ECR (ap-southeast-2, `067589750115`): `anuga:gpu-slim` 460 MB (cc70–cc120,
+  portable, AMD-verified on g6) and `anuga:gpu-mpi` 599 MB.
+- Uncommitted, deliberately: `towradgi.toml` arithmetic demo. Untracked:
+  `sandpit/culvert_issue/` (48 MB reporter model — do not commit).
+- Gadi: build works from a login node; the open question is whether that
+  `nvhpc` module can build `cc70` — run `tools/anuga_build_report.py --check`
+  on a `gpuvolta` node to find out.
+
+**Session 54 (2026-08-11):** Portable GPU image proven on AMD, C-level output
+captured in the logfile, and the first GPU scaling numbers at 1.6M triangles.
+- **`-tp=haswell` fix never actually built.** 394b61b8 set `CXXFLAGS=-tp=haswell`
+  too, but only `CC` is nvc — `CXX` stays g++, which rejects `-tp` and kills
+  meson's compiler detection (`Unable to detect linker for compiler c++ …`).
+  That is why the ECR image was still the non-portable AVX-512 build. Fixed in
+  `54b18f69`: **CFLAGS only** (`meson.build:166` already avoids `-march=native`,
+  so the g++-built C++ extensions were always portable).
+- **Portability PROVEN on AMD** — the thing that was outstanding all of session
+  53. Run landed on **g6.xlarge** (AMD EPYC Zen 4 + L4): `rc=0`, no SIGILL,
+  real GPU offload. g5 had zero capacity in Sydney all session; **g6 is the type
+  that actually launches** there.
+- **Logging: the logfile never contained C output.** `TeeStream` tees the
+  `sys.stdout` *object*, so everything the C extensions printf to fd 1 (the GPU
+  domain banner, Triangle, ~99 printf sites in the GPU kernels) reached the
+  terminal but not the file — batch logs had no record of the GPU config used.
+  `set_logfile()` now installs an **fd-level tee** (fd 1 → pipe → terminal +
+  file). Needed `setvbuf`/`reconfigure(line_buffering=True)` (fd 1 is no longer
+  a tty, so libc *and* Python block-buffer), and the logging file handler now
+  writes **through the pipe** so the file has a single writer and exact write
+  order. `file_only()` consequently mutes C output too. Adds `close_logfile()`;
+  `set_logfile()` now **truncates** (logs used to accumulate every run ever).
+  `anuga/utilities/tests/test_log.py` — subprocess-based, because pytest's
+  capture replaces `sys.stdout` with something that never touches fd 1.
+- **`-sc/--scale`** added to `run_small_towradgi.py` (10 = 135237 tri, 1 =
+  256688, 0.1 = 1636238). Deliberately **in the script, not anuga's standard
+  parser**: containerised runs take the script from the staged S3 inputs but
+  anuga from the image, so a parser-level flag needs an image rebuild. First
+  attempt (`c109e65d`) made exactly that mistake and failed on AWS with
+  `unrecognized arguments: -sc 0.1`; reverted in `39e3e429`.
+- **GPU scaling — small meshes flatter slow GPUs.** Same 600 s sim, mode 2:
+
+  | GPU | 257k mesh | 1.64M mesh |
+  |---|---|---|
+  | RTX 5070 laptop (cc120) | 24.77 s / 61.4 M cell-updates/s | 111.52 s / **73.4 M/s** |
+  | L4, g6.2xlarge (cc89) | 31.89 s / 47.7 M/s | 120.32 s / **68.1 M/s** |
+  | T4, g4dn (cc75) | 53.06 s / 28.6 M/s | — |
+
+  At 257k the 5070 looks 1.29× the L4; at 1.64M it is only **1.08×** — both
+  cards are under-saturated at 257k and the L4 recovers more (+43% vs +20%
+  throughput). Expect **g6 ≈ 93% of the laptop** on production-size problems.
+  Memory at 1.64M is only **3.4 GB host / 762 MB GPU** (per-cell cost is small;
+  the 1.6 GB at 257k is mostly fixed overhead — do not extrapolate linearly).
+  Results **bit-identical** across cc120/cc89, native vs container.
+- **towradgi's constant `delta t` is a mesh artifact, not physics** — see
+  KNOWN_ISSUES.
+
+**RESUME STATE (as of 2026-08-11, end of session 54):**
+- `develop` pushed to **`stoiver`**; **PR #218** open to `anuga-community/develop`
+  (14 commits at open; 2 more since — `-sc` flag add + revert/move).
+- ECR `anuga:gpu-slim` is current: portable multi-arch build **including** the
+  logging fixes (`sha256:ed7f18dcde0b…`).
+- Uncommitted working-tree edit: `towradgi.toml` arithmetic *demo*
+  (`finaltime="3600*24"`) — still not for committing.
+- Open follow-ups: PR #218 CI is a **gcc `gpu_offload=false`** build (differs
+  from the local nvc one); the terminal — not the logfile — is only
+  approximately ordered under the fd tee; REDIST trimming in the slim image.
+
+**Session 53 (2026-08-09 – 08-11):** Parallel bug fixes + Docker slim image +
+first real AWS GPU run of towradgi.
+- **MPI deadlock in `update_conserved_quantities`** (negative-cells "loss of
+  conservation" warning called the collective `get_water_volume()` under a
+  per-rank `if num_negative_ids>0` branch → `-np 1` worked, `-np 2` hung;
+  faulthandler pinned it). Fixed: warn **serial-only** (no collective in the hot
+  per-substep path; two earlier attempts — local volume, then unconditional
+  Allreduce — each caused a *new* hang, incl. `test_parallel_boyd_box_operator`).
+  → **PR #216, merged to develop.** Regression test
+  `test_parallel_negative_cells_deadlock.py` added.
+- **anuga_toml_run**: per-rank MPI logs; ranks≠GPUs unified guard (fail fast, not
+  hang); end-of-run water-balance V0 fix (capture at first yieldstep, not before
+  evolve — pre-evolve `get_water_volume` gives a bogus unclamped V0); `--emit-script`
+  (eject an editable standalone run script). *(on branch add-toml-scenario-features / PR #213)*
+- **Erosion**: default elevation to time-varying storage when erosion present —
+  TOML parser (warn only on explicit static) **and** core operators
+  (`_mark_domain_erosion`; `initialise_storage` warns if reset to static).
+- **Riverwall verbose output** condensed to one line per wall.
+- **TOML numeric fields** accept quoted arithmetic (`finaltime = "5*60"`, safe ast eval).
+- **Docker**: slim multi-stage GPU image (CUDA **-base** + NVHPC REDIST + venv) =
+  **2.15 GB / 459 MB compressed, ~37x smaller** to pull; validated locally. `-tp=haswell`
+  portability fix (native nvc build SIGILLs on AWS g5/Zen2 — no AVX-512). `aws_run_gpu.sh`
+  gained **`--ecr`** (private in-region image + role ECR-read + instance login).
+- **AWS**: validated `run_small_towradgi.py` end-to-end via ECR slim image
+  (`aws_run_gpu.sh --ecr --instance g4dn.xlarge`, rc=0, ~2 min). Coords in memory
+  `reference_aws_towradgi_run.md`.
+
+*(Session 53's resume state is superseded by session 54's above: the commits are
+pushed, PR #213 merged, and the ECR image rebuilt portable.)*
+
 
 **Session 52 (2026-07-25):** **Fix the CI unified-compute-mode failure + harden
 `update_conserved_quantities`.** The `github CI` "Test package (unified compute mode,
@@ -1174,7 +1482,7 @@ serial operators, absent here); MPI's growing `distribute` overhead (→30 s at
 **Session 42 (2026-06-25):** Test robustness, PR #144 conflict resolution, and an
 MPI build gotcha. Made the run_toml end-to-end test directory-independent: locate
 the checkout via `cwd` (not just `__file__`, which lives in site-packages for an
-installed pkg), then self-contained — prefer the installed `anuga_run_toml`
+installed pkg), then self-contained — prefer the installed `anuga_toml_run`
 console command + inline-generated inputs, so it runs from any directory and
 skips only when no runner exists (commits `316620e5`, `e9400c6d`). Resolved the
 conflicts on **PR #144** ("Defer GPU/offload interface build to first evolve"):
@@ -1190,7 +1498,7 @@ re-ran MPI detection; fixed by rebuilding into a fresh `-Cbuild-dir` (mpi4py
 fallback then finds `mpicc`/`mpi.h`), documented in `KNOWN_ISSUES.md` (commit
 `a07216dd`). Those four tests then pass (8/8).
 
-**Session 41 (2026-06-23):** `anuga_run_toml` TOML scenario runner — examples,
+**Session 41 (2026-06-23):** `anuga_toml_run` TOML scenario runner — examples,
 georeferencing, and an end-to-end test. Added `examples/run_toml/` with
 self-contained `simple/` (dam break) and `complex/` (floodplain) scenarios + per-
 scenario READMEs (commits `0c3c9546`, `d2f85ad4`). Added `"EPSG:<code>"`
@@ -1422,7 +1730,7 @@ suite: 58.13% → 58.68%.
 | Memory reporting | `anuga/utilities/system_tools.py::memory_stats()` |
 | Timestepping output | `anuga/abstract_2d_finite_volumes/generic_domain.py::timestepping_statistics()` |
 | Triangle quiet/verbose | `anuga/pmesh/mesh.py::_generateMesh_impl()` |
-| TOML scenario config | `anuga/scenario/`, `scripts/anuga_run_toml.py`, `examples/run_toml/` (simple/complex/cairns; shared DEM in `examples/data/cairns/`); legacy Excel front-end in `examples/cairns_toml_excel/` |
+| TOML scenario config | `anuga/scenario/`, `scripts/anuga_toml_run.py`, `examples/run_toml/` (simple/complex/cairns; shared DEM in `examples/data/cairns/`); legacy Excel front-end in `examples/cairns_toml_excel/` |
 | Single-process benchmark | `benchmarks/run_benchmarks.py` + `benchmarks/compare_benchmarks.py` |
 | MPI distribution benchmark | `benchmarks/distribute_benchmarks.py` + `benchmarks/run_benchmark_grid.py` |
 

@@ -31,7 +31,11 @@
 ARG NVHPC_TAG=25.9-devel-cuda_multi-ubuntu24.04
 FROM nvcr.io/nvidia/nvhpc:${NVHPC_TAG}
 
-ARG GPU_ARCH=cc75,cc80,cc86,cc89,cc90,cc120
+# cuda12.9 first: the cuda_multi base bundles CUDA 12.9 and 13.0 and defaults
+# to 13.0, whose libnvvm dropped Volta ("-arch=compute_70 is an unsupported
+# option").  12.9 supports Volta AND Blackwell (sm_120, added in 12.8), so one
+# fat binary covers cc70 (V100) through cc120 (RTX 50-series).
+ARG GPU_ARCH=cuda12.9,cc70,cc75,cc80,cc86,cc89,cc90,cc120
 # PEP 440 version to stamp into the build (.git is excluded from the context, so
 # `git describe` can't run inside the image). Pass what it would have produced:
 #   --build-arg ANUGA_VERSION="$(python _git_version.py)"
@@ -59,6 +63,12 @@ COPY . .
 
 # Build every extension with nvc (CC=nvc), GPU offload on, multi-arch.
 # --no-build-isolation so the pinned build deps + CC=nvc are the ones meson uses.
+# CFLAGS=-tp=haswell: nvc defaults to the *build host* CPU, which bakes
+# in that CPU's ISA (e.g. AVX-512) and SIGILLs ("Illegal instruction") on any
+# host lacking it — notably AWS g5 (AMD Zen2, no AVX-512). haswell (AVX2) is the
+# portable baseline every AWS GPU host and the dev laptops support.
+# C only: CC=nvc but CXX is left as g++, which rejects -tp (and needs no such
+# flag — meson.build deliberately avoids -march=native, so g++ is portable).
 RUN set -euo pipefail && \
     NVC="$(command -v nvc || true)"; \
     if [ -z "$NVC" ]; then echo "ERROR: nvc not found on PATH in this NVHPC image" >&2; exit 1; fi && \
@@ -66,6 +76,7 @@ RUN set -euo pipefail && \
     pip install --no-cache-dir -U pip && \
     pip install --no-cache-dir "numpy>=2.0" cython "meson>=1.4" meson-python ninja pybind11 && \
     ANUGA_VERSION="${ANUGA_VERSION}" CC="$NVC" \
+      CFLAGS="-tp=haswell" \
       pip install --no-cache-dir --no-build-isolation -v \
         -Csetup-args=-Dgpu_offload=true \
         -Csetup-args=-Dgpu_arch="${GPU_ARCH}" \
