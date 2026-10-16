@@ -30,9 +30,12 @@ class Collect_max_quantities_operator(Operator):
     minimum_allowed_height) to suppress spurious spikes in nearly-dry cells.
 
     When the domain is in GPU mode (MULTIPROCESSOR_GPU) the kernel runs
-    entirely on the device; a host<->device transfer for the four max arrays
-    only occurs at yield steps when store_to_sww=True, or on an explicit call
-    to export_max_quantities_to_csv().
+    entirely on the device every update; a device->host transfer of the four
+    max arrays only happens in sync_to_host(), which the domain calls when it
+    stores an SWW frame or writes a checkpoint (and export_max_quantities_to_csv()
+    calls it too).  The host arrays self.max_* are therefore current only after
+    sync_to_host().  On first GPU use the device arrays are seeded from the host
+    arrays, so maxima restored from a checkpoint carry over into the resumed run.
     """
 
     def __init__(self,
@@ -85,14 +88,19 @@ class Collect_max_quantities_operator(Operator):
             })
 
         self._gpu_initialized = False
+        self._gpu_dom = None
+        # True once a max update has run; until then there is nothing to sync
+        # (keeps the pre-update -max_float sentinel out of the stored frames).
+        self._collected = False
 
     # ------------------------------------------------------------------
     # GPU initialisation (lazy, called on first __call__ in GPU mode)
     # ------------------------------------------------------------------
 
     def _init_gpu(self):
-        if self._gpu_initialized:
+        if self._gpu_initialized and self._gpu_dom_or_none() is not None:
             return
+        self._gpu_initialized = False
 
         domain = self.domain
         try:
@@ -110,12 +118,66 @@ class Collect_max_quantities_operator(Operator):
 
         from anuga.shallow_water.sw_domain_gpu_ext import init_max_quantities_gpu
         n   = len(domain.centroid_coordinates[:, 0])
-        ret = init_max_quantities_gpu(gpu_interface.gpu_dom, n, self.velocity_zero_height)
+        # Seed the device arrays from the host maxima: fresh -inf/0 on a new
+        # run, the restored peaks on a checkpoint resume.
+        ret = init_max_quantities_gpu(gpu_interface.gpu_dom, n, self.velocity_zero_height,
+                                      self.max_stage, self.max_depth,
+                                      self.max_speed, self.max_uh)
         if ret != 0:
             raise RuntimeError(
                 "gpu_max_quantities_init failed — check device memory availability"
             )
         self._gpu_initialized = True
+        self._gpu_dom = gpu_interface.gpu_dom
+
+    def _gpu_dom_or_none(self):
+        """The GPUDomain whose device arrays hold the live maxima, else None."""
+        if not self._gpu_initialized:
+            return None
+        gpu_interface = getattr(self.domain, 'gpu_interface', None)
+        gpu_dom = getattr(gpu_interface, 'gpu_dom', None)
+        if gpu_dom is None or gpu_dom is not self._gpu_dom:
+            return None
+        return gpu_dom
+
+    def __getstate__(self):
+        # The device arrays belong to a GPUDomain that is not pickled (the
+        # domain drops gpu_interface).  After unpickling, re-initialise on the
+        # new GPUDomain, seeded from the host arrays saved here.
+        state = self.__dict__.copy()
+        state['_gpu_initialized'] = False
+        state['_gpu_dom'] = None
+        return state
+
+    def sync_to_host(self):
+        """Bring the host-side maxima up to date.
+
+        In GPU mode, copy the four device max arrays into self.max_stage,
+        self.max_depth, self.max_speed and self.max_uh (one device->host
+        transfer).  If store_to_sww=True, also copy them into the domain's
+        max_* quantities for the SWW writer.  On the CPU path the host arrays
+        are already current and this only refreshes the domain quantities.
+
+        The domain calls this before storing an SWW frame and before writing a
+        checkpoint, so the GPU kernel never pays a per-timestep transfer.
+        """
+        if not getattr(self, '_collected', True):
+            return
+        gpu_dom = self._gpu_dom_or_none()
+        if gpu_dom is not None:
+            from anuga.shallow_water.sw_domain_gpu_ext import get_max_quantities_gpu
+            get_max_quantities_gpu(gpu_dom,
+                                   self.max_stage, self.max_depth,
+                                   self.max_speed, self.max_uh)
+        if self.store_to_sww:
+            self._copy_to_domain_quantities()
+
+    def _copy_to_domain_quantities(self):
+        d = self.domain
+        d.quantities['max_stage'].centroid_values[:] = self.max_stage
+        d.quantities['max_depth'].centroid_values[:] = self.max_depth
+        d.quantities['max_speed'].centroid_values[:] = self.max_speed
+        d.quantities['max_uh'].centroid_values[:]    = self.max_uh
 
     # ------------------------------------------------------------------
 
@@ -132,6 +194,7 @@ class Collect_max_quantities_operator(Operator):
 
             if self.counter == self.update_frequency:
                 self.counter = 0
+                self._collected = True
 
                 # ---- GPU path ----------------------------------------
                 domain = self.domain
@@ -149,23 +212,12 @@ class Collect_max_quantities_operator(Operator):
                 if _gpu_mode:
                     self._init_gpu()
                     if self._gpu_initialized:
-                        from anuga.shallow_water.sw_domain_gpu_ext import (
-                            update_max_quantities_gpu, get_max_quantities_gpu)
+                        from anuga.shallow_water.sw_domain_gpu_ext import \
+                            update_max_quantities_gpu
 
+                        # Device-only update; host arrays are refreshed by
+                        # sync_to_host() when a frame is stored.
                         update_max_quantities_gpu(domain.gpu_interface.gpu_dom)
-
-                        if self.store_to_sww:
-                            # D2H sync: pull device maxima to host numpy arrays,
-                            # then push to domain quantities for the SWW writer.
-                            get_max_quantities_gpu(
-                                domain.gpu_interface.gpu_dom,
-                                self.max_stage, self.max_depth,
-                                self.max_speed, self.max_uh)
-                            d = domain
-                            d.quantities['max_stage'].centroid_values[:] = self.max_stage
-                            d.quantities['max_depth'].centroid_values[:] = self.max_depth
-                            d.quantities['max_speed'].centroid_values[:] = self.max_speed
-                            d.quantities['max_uh'].centroid_values[:]    = self.max_uh
                         return
 
                 # ---- CPU / NumPy path --------------------------------
@@ -187,11 +239,7 @@ class Collect_max_quantities_operator(Operator):
                 self.max_speed = num.maximum(self.max_speed, vel)
 
                 if self.store_to_sww:
-                    d = self.domain
-                    d.quantities['max_stage'].centroid_values[:] = self.max_stage
-                    d.quantities['max_depth'].centroid_values[:] = self.max_depth
-                    d.quantities['max_speed'].centroid_values[:] = self.max_speed
-                    d.quantities['max_uh'].centroid_values[:]    = self.max_uh
+                    self._copy_to_domain_quantities()
 
     def parallel_safe(self):
         """Operator is applied independently on each cell and so is parallel safe."""
@@ -209,20 +257,7 @@ class Collect_max_quantities_operator(Operator):
 
         # For GPU mode, ensure host arrays are up to date before export.
         domain = self.domain
-        if self._gpu_initialized:
-            try:
-                from anuga.config import MULTIPROCESSOR_GPU
-                from anuga.shallow_water.sw_domain_gpu_ext import get_max_quantities_gpu
-                if (hasattr(domain, 'multiprocessor_mode') and
-                        domain.multiprocessor_mode == MULTIPROCESSOR_GPU and
-                        hasattr(domain, 'gpu_interface') and
-                        domain.gpu_interface is not None):
-                    get_max_quantities_gpu(
-                        domain.gpu_interface.gpu_dom,
-                        self.max_stage, self.max_depth,
-                        self.max_speed, self.max_uh)
-            except (ImportError, Exception):
-                pass
+        self.sync_to_host()
 
         full_ids = domain.tri_full_flag.nonzero()[0]
         geo = domain.geo_reference
