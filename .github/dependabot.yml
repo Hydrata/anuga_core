@@ -11,3 +11,4 @@ updates:
           - "*"  # Group all Actions updates into a single larger pull request
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0   # TASK-4011 (D11b): fork = alerts only, no version-update PRs

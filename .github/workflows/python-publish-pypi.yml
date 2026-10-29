@@ -52,10 +52,10 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0  # git describe needs full history for version
-      - uses: conda-incubator/setup-miniconda@v4
+      - uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4
         with:
           miniforge-version: latest
           use-mamba: true
@@ -155,7 +155,7 @@ jobs:
           repairwheel "${libdirs[@]}" -o dist dist-wheel/*.whl
 
       - name: Upload wheel artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: wheel-py${{ matrix.python-version }}-${{ matrix.os }}
           path: dist/*.whl
@@ -177,14 +177,14 @@ jobs:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0  # git describe needs full history for version
 
       - name: Ensure Rosetta 2 (to run x86_64 binaries on arm64)
         run: sudo softwareupdate --install-rosetta --agree-to-license || true
 
-      - uses: conda-incubator/setup-miniconda@v4
+      - uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4
         with:
           miniforge-version: latest
           use-mamba: true
@@ -217,7 +217,7 @@ jobs:
           repairwheel -l "$CONDA_PREFIX/lib" -o dist dist-wheel/*.whl
 
       - name: Upload wheel artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: wheel-osx64-py${{ matrix.python-version }}
           path: dist/*.whl
@@ -230,11 +230,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
-      - uses: conda-incubator/setup-miniconda@v4
+      - uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4
         with:
           miniforge-version: latest
           use-mamba: true
@@ -258,7 +258,7 @@ jobs:
           python -m build --sdist --outdir dist
 
       - name: Upload sdist artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -300,14 +300,14 @@ jobs:
           exit 1
 
       - name: Download all wheel artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: wheel-*
           path: dist
           merge-multiple: true
 
       - name: Download sdist artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: sdist
           path: dist
@@ -316,7 +316,7 @@ jobs:
         run: ls -lh dist/
 
       - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           verify-metadata: false
@@ -339,14 +339,14 @@ jobs:
 
     steps:
       - name: Download all wheel artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: wheel-*
           path: dist
           merge-multiple: true
 
       - name: Download sdist artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: sdist
           path: dist
@@ -355,7 +355,7 @@ jobs:
         run: ls -lh dist/
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           verify-metadata: false
           verbose: true
